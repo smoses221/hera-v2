@@ -16,3 +16,6 @@ deps
 _build/
 _checkouts/
 _grisp/
+
+# Hotspot
+grisp/default/common/deploy/files/wpa_supplicant.conf
