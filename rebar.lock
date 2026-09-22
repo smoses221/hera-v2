@@ -1,0 +1,8 @@
+[{<<"hera_synchronization">>,
+  {git,"https://github.com/sebkm/hera_synchronization",
+       {ref,"d5344e7d916edff1d58ce0c5357386d4fc6b82e7"}},
+  0},
+ {<<"numerl">>,
+  {git,"https://github.com/tanguyl/numerl.git",
+       {ref,"4d7cf8a5e98eca70710e5032f330e55c006cc6f1"}},
+  0}].

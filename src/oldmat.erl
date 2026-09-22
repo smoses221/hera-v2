@@ -164,7 +164,7 @@ inv(M) ->
     Result :: matrix().
 
 eval([L|[O|[R|T]]]) ->
-    F = fun mat:O/2,
+    F = fun oldmat:O/2,
     eval([F(L, R)|T]);
 eval([Res]) ->
     Res.

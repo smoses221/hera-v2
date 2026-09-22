@@ -5,12 +5,14 @@
   {mod, {hera, []}},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    numerl
    ]},
   {env, [{log_data, false}]},
   {modules, [hera, hera_sup, hera_data, hera_com,
     hera_measure_sup, hera_measure,
-    kalman, mat]},
+    kalman, mat, oldmat,
+    kalman_bench, bench_runner]},
   {licenses, ["Apache 2.0"]},
   {links, []}
  ]}.
