@@ -1,0 +1,20 @@
+Error: {badkey,[build,config]}
+[{mapz,'-deep_get/2-fun-0-',2,
+       [{file,"/home/jl/TFE/code/hera_to_BLAS/hera/_build/default/plugins/mapz/src/mapz.erl"},
+        {line,141}]},
+ {grisp_tools_build,configure,1,
+                    [{file,"/home/jl/TFE/code/hera_to_BLAS/hera/_build/default/plugins/grisp_tools/src/grisp_tools_build.erl"},
+                     {line,171}]},
+ {lists,foldl_1,3,[{file,"lists.erl"},{line,1355}]},
+ {grisp_tools_util,weave,2,
+                   [{file,"/home/jl/TFE/code/hera_to_BLAS/hera/_build/default/plugins/grisp_tools/src/grisp_tools_util.erl"},
+                    {line,72}]},
+ {lists,foldl_1,3,[{file,"lists.erl"},{line,1355}]},
+ {grisp_tools_util,weave,2,
+                   [{file,"/home/jl/TFE/code/hera_to_BLAS/hera/_build/default/plugins/grisp_tools/src/grisp_tools_util.erl"},
+                    {line,59}]},
+ {lists,foldl_1,3,[{file,"lists.erl"},{line,1355}]},
+ {grisp_tools_util,weave,2,
+                   [{file,"/home/jl/TFE/code/hera_to_BLAS/hera/_build/default/plugins/grisp_tools/src/grisp_tools_util.erl"},
+                    {line,59}]}]
+
