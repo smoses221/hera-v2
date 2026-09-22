@@ -26,14 +26,16 @@ init([]) ->
         id => hera_data,
         start => {hera_data, start_link, []}
     },
-    HeraCom = #{
-        id => hera_com,
-        start => {hera_com, start_link, []}
-    },
     HeraMeasureSup = #{
         id => hera_measure_sup,
         start => {hera_measure_sup, start_link, []},
         type => supervisor
     },
-    ChildSpecs = [HeraData, HeraCom, HeraMeasureSup],
+    ComSpecs = case application:get_env(hera, start_com, true) of
+        true ->
+            [#{id => hera_com, start => {hera_com, start_link, []}}];
+        false ->
+            []
+    end,
+    ChildSpecs = [HeraData] ++ ComSpecs ++ [HeraMeasureSup],
     {ok, {SupFlags, ChildSpecs}}.
