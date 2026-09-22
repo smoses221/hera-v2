@@ -1,8 +1,23 @@
-[{<<"hera_synchronization">>,
+{"1.2.0",
+[{<<"epmd">>,
+  {git,"https://github.com/erlang/epmd",
+       {ref,"4d1a595b9d5c32fc0e55f462da381de62de23bf0"}},
+  0},
+ {<<"grisp">>,{pkg,<<"grisp">>,<<"2.12.1">>},0},
+ {<<"hera_synchronization">>,
   {git,"https://github.com/sebkm/hera_synchronization",
        {ref,"d5344e7d916edff1d58ce0c5357386d4fc6b82e7"}},
   0},
+ {<<"mapz">>,{pkg,<<"mapz">>,<<"2.4.0">>},1},
  {<<"numerl">>,
   {git,"https://github.com/tanguyl/numerl.git",
        {ref,"4d7cf8a5e98eca70710e5032f330e55c006cc6f1"}},
-  0}].
+  0}]}.
+[
+{pkg_hash,[
+ {<<"grisp">>, <<"93FC4C5263B10619A33BBF83BCBA548F914CD28FD342A1139FAD0804814ACF1D">>},
+ {<<"mapz">>, <<"77A8E38B69BAB16C5D3EBD44E6C619F8AF1F1598B0CAAE301D266605A0865756">>}]},
+{pkg_hash_ext,[
+ {<<"grisp">>, <<"0D5A362F4925687115EA32CED1C272E2915A1F2F93DE55DCD3534BA937AC48B3">>},
+ {<<"mapz">>, <<"4B68DF5CF0522E0D6545DF7B681BC052865CDB78405AD4CC9C55FE45EE7B25BE">>}]}
+].
