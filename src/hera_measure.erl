@@ -2,7 +2,7 @@
 
 -export([start_link/2]).
 
--type measure_spec() :: #{
+-type measure_spec() :: #{ %defines the obligatory and possible fields and types for the map measure_spec
     name := atom(), % measure id
     iter := pos_integer() | infinity, % number of measures to perform
     sync => boolean(), % must the measure must be synchronized? (default: false)
@@ -16,7 +16,7 @@
 
 -callback measure(State :: term()) ->
     {ok, Values, NewState} | {undefined, NewState} when
-    Values :: [number(), ...],  
+    Values :: [number(), ...],  % a non-empty list of numbers
     NewState :: term().
 
 -record(state, {
@@ -30,6 +30,7 @@
     mod_state :: term()
 }).
 
+% Converts a record instance into a list of {FieldName, Value} pairs
 -define(record_to_tuplelist(Name, Rec),
     lists:zip(record_info(fields, Name), tl(tuple_to_list(Rec)))).
 
