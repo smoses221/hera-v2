@@ -1,5 +1,0 @@
-stage,backend,path,n,min_us,mean_us,median_us,max_us,stddev_us
-otp25-baseline,mat,uwb_1x6,10000,37,41.394,38.000,2627,45.387
-otp25-baseline,mat,nav_2x6,10000,37,41.242,38.000,2302,39.722
-otp25-baseline,oldmat,uwb_1x6,10000,2175,2415.071,2244.000,7024,587.867
-otp25-baseline,oldmat,nav_2x6,10000,2585,2871.317,2666.000,5838,632.714
