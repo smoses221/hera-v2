@@ -8,11 +8,7 @@
   {git,"https://github.com/sebkm/hera_synchronization",
        {ref,"d5344e7d916edff1d58ce0c5357386d4fc6b82e7"}},
   0},
- {<<"mapz">>,{pkg,<<"mapz">>,<<"2.4.0">>},1},
- {<<"numerl">>,
-  {git,"https://github.com/tanguyl/numerl.git",
-       {ref,"4d7cf8a5e98eca70710e5032f330e55c006cc6f1"}},
-  0}]}.
+ {<<"mapz">>,{pkg,<<"mapz">>,<<"2.4.0">>},1}]}.
 [
 {pkg_hash,[
  {<<"grisp">>, <<"93FC4C5263B10619A33BBF83BCBA548F914CD28FD342A1139FAD0804814ACF1D">>},

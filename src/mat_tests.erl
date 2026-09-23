@@ -189,11 +189,7 @@ inv_test() ->
     ?assert(mat:'=='(M1, mat:inv(M1))),
 
     I2 = mat:eye(2),
-    io:format("I2 = ~p~n", [I2]),
     M2 = mat:matrix([[1,2], [3,4]]),
-    io:format("M2 = ~p~n", [M2]),
-    io:format("M2*inv(M2) = ~p~n", [mat:'*'(M2, mat:inv(M2))]),
-    io:format("inv(M2) = ~p~n", [mat:inv(M2)]),
     ?assert(mat:'=='(I2, mat:'*'(M2, mat:inv(M2)))),
 
     I3 = mat:eye(3),

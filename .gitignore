@@ -19,3 +19,7 @@ _grisp/
 
 # Hotspot
 grisp/default/common/deploy/files/wpa_supplicant.conf
+
+# Temp for getting csv files from the grisp2
+input.txt
+BENCHMARKING_LOG.md
