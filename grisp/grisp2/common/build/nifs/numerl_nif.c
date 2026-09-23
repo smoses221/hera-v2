@@ -429,7 +429,7 @@ ERL_NIF_TERM nif_zeros(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]){
 
 //@arg 0: int.
 //@arg 1: int.
-//@return: empty matrix of dimension [arg 0, arg 1]..
+//@return: identity matrix of dimension [arg 0, arg 1]..
 ERL_NIF_TERM nif_eye(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]){
     int m;
     if(!enif_get_int(env, argv[0], &m))
@@ -633,9 +633,9 @@ ERL_NIF_TERM nif_inv(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]){
     //j for all indexes of column
     for(int j=0; j<a.n_cols; j++){
 
-        //Find the row of the maximum in column j
+        //Find the row of the maximum in column j, among rows not yet used as pivots
         int pivot_row = -1;
-        for(int cur_row=r; cur_row<a.n_rows; cur_row++){
+        for(int cur_row=r+1; cur_row<a.n_rows; cur_row++){
             if(pivot_row<0 || fabs(gj[cur_row*n_cols + j]) > fabs(gj[pivot_row*n_cols+j])){
                 pivot_row = cur_row;
             }
