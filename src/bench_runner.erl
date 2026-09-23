@@ -21,28 +21,46 @@
 %%                             %% see dump_csv/1 below.
 
 -define(DEFAULT_PATH, "/bench_results.csv").
--define(ITERATIONS, 1000).
+-define(ITERATIONS, 10000).
+
+%% Fixed RNG seed so benchmark runs stay reproducible/comparable
+%% across stages (OTP/toolchain/BLAS) instead of each run drawing a
+%% different random sensor-data stream.
+-define(RAND_SEED, {42, 1337, 271828}).
 
 run(Mod, Stage) ->
     run(Mod, Stage, ?DEFAULT_PATH).
 
 run(Mod, Stage, Path) ->
+    _ = rand:seed(exsss, ?RAND_SEED),
     ensure_header(Path),
     {F, P0, Q} = fixtures_6x6(Mod),
     UwbH = mk(Mod, [[1,0,0,0,0,0]]),
     UwbR = mk(Mod, [[0.01]]),
-    UwbZ = mk(Mod, [[1.0]]),
     NavH = mk(Mod, [[0,1,0,0,0,0], [0,0,1,0,0,0]]),
     NavR = mk(Mod, [[0.01,0], [0,0.01]]),
-    NavZ = mk(Mod, [[1.0], [1.0]]),
     X0 = Mod:zeros(6, 1),
 
-    UwbStats = bench_path(Mod, {X0, P0}, F, Q, UwbH, UwbR, UwbZ),
-    NavStats = bench_path(Mod, {X0, P0}, F, Q, NavH, NavR, NavZ),
+    %% Pre-generate the randomized measurement stream *before* timing
+    %% starts, so RNG cost never counts as filter cost. F/H/Q/R stay
+    %% fixed -- those are the model/tuning parameters of a real
+    %% Kalman filter and legitimately don't vary call to call; only
+    %% the measurement Z and the evolving (X, P) state do.
+    UwbZs = [mk(Mod, [[random_reading()]]) || _ <- lists:seq(1, ?ITERATIONS)],
+    NavZs = [mk(Mod, [[random_reading()], [random_reading()]]) || _ <- lists:seq(1, ?ITERATIONS)],
+
+    UwbStats = bench_path(Mod, {X0, P0}, F, Q, UwbH, UwbR, UwbZs),
+    NavStats = bench_path(Mod, {X0, P0}, F, Q, NavH, NavR, NavZs),
 
     write_row(Path, Stage, Mod, "uwb_1x6", UwbStats),
     write_row(Path, Stage, Mod, "nav_2x6", NavStats),
     #{uwb => UwbStats, nav => NavStats}.
+
+%% Stand-in for a noisy sensor reading. The exact physical range
+%% doesn't matter for a pure timing benchmark, only that consecutive
+%% calls see different, non-degenerate values.
+random_reading() ->
+    -10.0 + rand:uniform() * 20.0.
 
 %% Prints Path as base64, wrapped at 76 chars/line, between clear
 %% markers. On the host: capture your serial terminal's scrollback
@@ -65,15 +83,22 @@ print_b64_chunks(Bin) ->
     io:format("~s~n", [Chunk]),
     print_b64_chunks(Rest).
 
-bench_path(Mod, State, F, Q, H, R, Z) ->
-    Times = [time_one_iter(Mod, State, F, Q, H, R, Z) || _ <- lists:seq(1, ?ITERATIONS)],
+%% Runs the filter continuously across Zs, one predict+update per
+%% measurement, threading (X, P) from one call into the next -- this
+%% matches how hera actually runs a Kalman filter (a live stream of
+%% measurements), rather than resetting to the same initial state on
+%% every timed iteration.
+bench_path(Mod, State0, F, Q, H, R, Zs) ->
+    {Times, _FinalState} = lists:mapfoldl(
+        fun(Z, State) -> time_one_iter(Mod, State, F, Q, H, R, Z) end,
+        State0, Zs),
     stats(Times).
 
 time_one_iter(Mod, State, F, Q, H, R, Z) ->
     T0 = erlang:monotonic_time(microsecond),
-    _ = kalman_bench:kf(Mod, State, F, H, Q, R, Z),
+    NewState = kalman_bench:kf(Mod, State, F, H, Q, R, Z),
     T1 = erlang:monotonic_time(microsecond),
-    T1 - T0.
+    {T1 - T0, NewState}.
 
 stats(Times) ->
     N = length(Times),
