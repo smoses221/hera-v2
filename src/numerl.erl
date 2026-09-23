@@ -1,5 +1,5 @@
 -module(numerl).
-%-on_load(init/0).
+-on_load(init/0).
 -export([ eval/1, eye/1, zeros/2, equals/2, add/2, sub/2,mult/2, divide/2, matrix/1, rnd_matrix/1, get/3, at/2, mtfli/1, mtfl/1, row/2, col/2, transpose/1, inv/1, nrm2/1, vec_dot/2, dot/2, init/0]).
 
 %Matrices are represented as such:
@@ -24,47 +24,47 @@ eval([Res])->
 %List: List of doubles, of length N.
 %Return: a matrix of dimension MxN, containing the data.
 matrix(_) ->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 %%Returns the Nth value contained within Matrix.
 at(_Matrix,_Nth)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 %%Returns the matrix as a flattened list of ints.
 mtfli(_mtrix)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 %%Returns the matrix as a flattened list of doubles.
 mtfl(_mtrix)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 %%Returns a value from a matrix.
 get(_,_,_) ->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 %%Returns requested row. 
 row(_,_) ->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 
 %%Returns requested col.
 col(_,_) ->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 
 %%Equality test between matrixes.
 equals(_, _) ->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 
 %%Addition of matrix.
 add(_, _) ->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 
 %%Subtraction of matrix.
 sub(_, _) ->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 
 %% Matrix multiplication.
@@ -72,31 +72,31 @@ mult(A,B) when is_number(B) -> '*_num'(A,B);
 mult(A,B) -> '*_matrix'(A,B).
 
 '*_num'(_,_)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 '*_matrix'(_, _)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 %Matrix division by a number
 divide(_,_)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 
 %% build a null matrix of size NxM
 zeros(_, _) ->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 %%Returns an Identity matrix NxN.
 eye(_)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 %Returns the transpose of the given square matrix.
 transpose(_)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 %Returns the inverse of asked square matrix.
 inv(_)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 
 %------CBLAS--------
@@ -104,14 +104,14 @@ inv(_)->
 %nrm2
 %Calculates the squared root of the sum of the squared contents.
 nrm2(_)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 % : dot product of two vectors
 % Arguments: vector x, vector y.
 %   x and y are matrices
 % Returns the dot product of all the coordinates of X,Y.
 vec_dot(_, _)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
 
 % dgemm: A dot B 
 % Arguments: Matrix A, Matrix B.
@@ -119,4 +119,4 @@ vec_dot(_, _)->
 %   A,B,C: matrices.
 % Returns the matrice resulting of the operations alpha * A * B + beta * C.
 dot(_,_)->
-    nif_not_loaded.
+    erlang:nif_error(nif_not_loaded).
