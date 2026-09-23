@@ -17,13 +17,13 @@ kf_predict(Mod, {X0, P0}, F, Q) ->
     Xp = Mod:'*'(F, X0),
     Pp = Mod:eval([F, '*', P0, '*´', F, '+', Q]),
     {Xp, Pp}.
-
+%*´ is M3 = M1 * tr(M2)
 
 kf_update(Mod, {Xp, Pp}, H, R, Z) ->
     S = Mod:eval([H, '*', Pp, '*´', H, '+', R]),
     Sinv = Mod:inv(S),
     K = Mod:eval([Pp, '*´', H, '*', Sinv]),
     Y = Mod:'-'(Z, Mod:'*'(H, Xp)),
-    X1 = Mod:eval([K, '*', Y, '+', Xp]),
+    X1 = Mod:eval([K, '*', Y, '+', Xp]), % Terms are the other way around in my notes 
     P1 = Mod:'-'(Pp, Mod:eval([K, '*', H, '*', Pp])),
     {X1, P1}.

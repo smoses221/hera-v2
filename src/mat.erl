@@ -160,6 +160,7 @@ inv(M) ->
     T :: matrix() | '+' | '-' | '*' | '*´',
     Result :: matrix().
 
+% Evaluates strictly left to right, with no operator precedence.
 eval([L|[O|[R|T]]]) ->
     F = fun mat:O/2,
     eval([F(L, R)|T]);
