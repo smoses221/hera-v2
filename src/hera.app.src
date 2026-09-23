@@ -5,7 +5,8 @@
   {mod, {hera, []}},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    grisp
    ]},
   {env, [{log_data, false}, {start_com, false}]},
   {modules, [hera, hera_sup, hera_data, hera_com,
