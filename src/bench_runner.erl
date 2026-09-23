@@ -21,7 +21,7 @@
 %%                             %% see dump_csv/1 below.
 
 -define(DEFAULT_PATH, "/bench_results.csv").
--define(ITERATIONS, 10000).
+-define(ITERATIONS, 20000).
 
 %% Fixed RNG seed so benchmark runs stay reproducible/comparable
 %% across stages (OTP/toolchain/BLAS) instead of each run drawing a
