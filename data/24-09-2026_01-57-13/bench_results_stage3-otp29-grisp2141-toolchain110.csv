@@ -1,0 +1,5 @@
+stage,backend,path,n,min_us,mean_us,median_us,max_us,stddev_us
+otp29-grisp2.14.1-toolchain1.1.0,mat,uwb_1x6,20000,126,174.060,136.000,7175,259.174
+otp29-grisp2.14.1-toolchain1.1.0,mat,nav_2x6,20000,132,180.677,143.000,2623,245.222
+otp29-grisp2.14.1-toolchain1.1.0,oldmat,uwb_1x6,20000,1125,1356.855,1191.000,6778,553.625
+otp29-grisp2.14.1-toolchain1.1.0,oldmat,nav_2x6,20000,1345,1617.120,1414.000,4215,596.557
