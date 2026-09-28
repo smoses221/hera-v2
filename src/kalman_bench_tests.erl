@@ -2,14 +2,14 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-%% Runs the same fixture data and golden values as kalman_tests.erl
+%% Runs the same fixture data and golden values as previous kalman_tests.erl file
 %% (which exercises production kalman:kf/6 against the `mat` backend)
 %% through kalman_bench:kf/7 instead, for every matrix backend under
 %% test. This both (a) checks kalman_bench's parametrized equations
 %% match kalman.erl's production behaviour, and (b) gives every
-%% backend (starting with `oldmat`) the same correctness coverage.
+%% backend (`oldmat`, `blasmat`) the same correctness coverage.
 
--define(BACKENDS, [mat, oldmat]).
+-define(BACKENDS, [mat, oldmat, blasmat]).
 
 kf_all_backends_test_() ->
     [{atom_to_list(Mod), fun() -> kf_backend(Mod) end} || Mod <- ?BACKENDS].
@@ -56,6 +56,7 @@ kf_test_loop(Mod, State, [S|Ss], [A|As]) ->
 %% oldmat has no matrix/1 constructor: its matrix() type is already a
 %% plain nested list, so construction is the identity for that backend.
 mk(mat, L) -> mat:matrix(L);
-mk(oldmat, L) -> L.
+mk(oldmat, L) -> L;
+mk(blasmat, L) -> blasmat:matrix(L).
 
 mk_zeros(Mod, N, M) -> Mod:zeros(N, M).

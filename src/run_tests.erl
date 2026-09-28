@@ -11,7 +11,7 @@
 %%
 %% Usage (after pushing this module + the test modules themselves via
 %% scripts/beam_to_paste.sh <module> test):
-%%   run_tests:run([mat_tests, oldmat_tests, kalman_tests, kalman_bench_tests]).
+%%   run_tests:run([mat_tests, kalman_bench_tests]).
 
 run(Modules) when is_list(Modules) ->
     lists:foreach(fun run/1, Modules);

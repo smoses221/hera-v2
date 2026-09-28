@@ -16,6 +16,7 @@
 %% Usage from a serial/remsh session on the board, e.g.:
 %%   bench_runner:run(mat, "otp25-baseline").
 %%   bench_runner:run(oldmat, "otp25-baseline").
+%%   bench_runner:run(blasmat, "stage4-blas").
 %%   bench_runner:dump_csv().  %% prints the accumulated results as
 %%                             %% base64, to pull off over serial --
 %%                             %% see dump_csv/1 below.

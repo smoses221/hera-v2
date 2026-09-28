@@ -8,7 +8,7 @@
 
 % to print matrix     io:format(user, "~20p~n", [numerl:mtfli(P3)]),
 
--define(BACKENDS, [mat, oldmat]).
+-define(BACKENDS, [mat, oldmat, blasmat]).
 
 
 tr_test_() -> each_backend(fun tr/1).
@@ -241,8 +241,10 @@ each_backend(TestFun) ->
 %% oldmat has no matrix/1 constructor: its matrix() type is already a
 %% plain nested list, so construction is the identity for that backend.
 mk(mat, L) -> mat:matrix(L);
-mk(oldmat, L) -> L.
+mk(oldmat, L) -> L;
+mk(blasmat, L) -> blasmat:matrix(L).
 
-%% mat stores elements as floats, oldmat keeps them as given.
+%% mat and blasmat store elements as floats, oldmat keeps them as given.
 num(mat, N) -> float(N);
-num(oldmat, N) -> N.
+num(oldmat, N) -> N;
+num(blasmat, N) -> float(N).

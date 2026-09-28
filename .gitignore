@@ -17,6 +17,9 @@ _build/
 _checkouts/
 _grisp/
 
+# Host build of the vendored BLAS NIF (c_src/Makefile)
+priv/*.so
+
 # Hotspot
 grisp/default/common/deploy/files/wpa_supplicant.conf
 
