@@ -4,8 +4,8 @@
 -export([run_path/3]).
 -export([dump_csv/0, dump_csv/1]).
 
-%% Benchmarks one Kalman step (predict + update) for a given matrix
-%% backend module (mat | oldmat | blasmat, ...) on a 9x9 constant-
+%% Benchmarks one Kalman step (predict + update) for a given backend on
+%% a 9x9 constant-
 %% acceleration model. State x = [px,vx,ax, py,vy,ay, pz,vz,az]:
 %% position, velocity and acceleration for each axis. Two paths, both
 %% treating the sensor as a measurement (no control input):
@@ -16,6 +16,15 @@
 %%                  h(x) = |p - anchor| linearised by its Jacobian
 %%                  (1x9, S: 1x1), dt = 0.1 s.
 %%
+%% Backends:
+%%   - mat | oldmat | blasmat: matrix modules, one call per matrix
+%%     operation, through kalman_bench:kf/7 and ekf/7.
+%%   - blasws: same, but on erlef/blas buffers reused across steps
+%%     (diagnostic: no per-operation allocation).
+%%   - kfblas: the whole step in one NIF call (two for the EKF, whose
+%%     range model stays in Erlang). kfblas also runs a third path,
+%%     uwb_ekf_range_1x9, with the range model in C: one call per step.
+%%
 %% Results (min/mean/median/max/stddev over N iterations, in
 %% microseconds) are appended as CSV rows to Path, tagged with Stage
 %% so results from different benchmark stages (OTP/toolchain/BLAS
@@ -25,6 +34,8 @@
 %%   bench_runner:run(mat, "stage5-9x9").
 %%   bench_runner:run(oldmat, "stage5-9x9").
 %%   bench_runner:run(blasmat, "stage5-9x9").
+%%   bench_runner:run(blasws, "stage6-fused").
+%%   bench_runner:run(kfblas, "stage6-fused").
 %%   bench_runner:dump_csv().  %% prints the accumulated results as
 %%                             %% base64, to pull off over serial --
 %%                             %% see dump_csv/1 below.
@@ -54,13 +65,20 @@ run(Mod, Stage) ->
 
 run(Mod, Stage, Path) ->
     ensure_header(Path),
-    {ImuTimes, _} = run_path(Mod, imu, ?ITERATIONS),
-    {UwbTimes, _} = run_path(Mod, uwb, ?ITERATIONS),
-    ImuStats = stats(ImuTimes),
-    UwbStats = stats(UwbTimes),
-    write_row(Path, Stage, Mod, "imu_kf_3x9", ImuStats),
-    write_row(Path, Stage, Mod, "uwb_ekf_1x9", UwbStats),
-    #{imu => ImuStats, uwb => UwbStats}.
+    maps:from_list(
+        [begin
+             {Times, _} = run_path(Mod, BenchPath, ?ITERATIONS),
+             Stats = stats(Times),
+             write_row(Path, Stage, Mod, label(BenchPath), Stats),
+             {BenchPath, Stats}
+         end || BenchPath <- paths(Mod)]).
+
+paths(kfblas) -> [imu, uwb, uwb_range];
+paths(_) -> [imu, uwb].
+
+label(imu) -> "imu_kf_3x9";
+label(uwb) -> "uwb_ekf_1x9";
+label(uwb_range) -> "uwb_ekf_range_1x9".
 
 %% Runs N filter steps of one path and returns {PerStepTimesUs,
 %% FinalState}. Also used by kalman_bench_tests to check that all
@@ -72,29 +90,75 @@ run(Mod, Stage, Path) ->
 %% real Kalman filter; only the measurement Z and the evolving (X, P)
 %% state change. The filter runs continuously across the stream,
 %% threading (X, P) from one step into the next, as hera does.
+%%
+%% For blasws/kfblas the filter is mutable, so the returned final state
+%% is read out with get_state/1 as {XList, PList} (flat, row-major).
+run_path(Eng, imu, N) when Eng =:= kfblas; Eng =:= blasws ->
+    Zs = [f64(Z) || Z <- imu_readings(N)],
+    H = f64(imu_h()),
+    R = f64(imu_r()),
+    Filter = engine_filter(Eng, ?DT_IMU),
+    Step = fun(Z, Flt) -> ok = Eng:kf_step(Flt, H, R, Z), Flt end,
+    engine_result(Eng, time_steps(Step, Filter, Zs));
+run_path(Eng, uwb, N) when Eng =:= kfblas; Eng =:= blasws ->
+    Ms = [{A, f64([Z])} || {A, Z} <- range_readings(N)],
+    R = f64([?VAR_RANGE]),
+    Filter = engine_filter(Eng, ?DT_UWB),
+    %% Range model in Erlang, from the predicted state the NIF returns.
+    Step = fun({Anchor, Z}, Flt) ->
+        Xp = Eng:ekf_predict(Flt),
+        {Hx, Jh} = range_bins(Xp, Anchor),
+        ok = Eng:ekf_update(Flt, Jh, Hx, R, Z),
+        Flt
+    end,
+    engine_result(Eng, time_steps(Step, Filter, Ms));
+run_path(kfblas, uwb_range, N) ->
+    Ms = [{f64(tuple_to_list(A)), f64([Z])} || {A, Z} <- range_readings(N)],
+    R = f64([?VAR_RANGE]),
+    Filter = engine_filter(kfblas, ?DT_UWB),
+    %% Range model in C: one call per step. Position is x[0], x[3], x[6].
+    Step = fun({Anchor, Z}, Flt) ->
+        ok = kfblas:ekf_range_step(Flt, {0, 3, 6}, Anchor, R, Z),
+        Flt
+    end,
+    engine_result(kfblas, time_steps(Step, Filter, Ms));
 run_path(Mod, imu, N) ->
-    _ = rand:seed(exsss, ?RAND_SEED),
+    Zs = [mk(Mod, [[A] || A <- Z]) || Z <- imu_readings(N)],
     {F, Q} = motion_model(Mod, ?DT_IMU),
-    H = mk(Mod, [[0,0,1,0,0,0,0,0,0],
-                 [0,0,0,0,0,1,0,0,0],
-                 [0,0,0,0,0,0,0,0,1]]),
-    R = mk(Mod, [[?VAR_ACC,0,0], [0,?VAR_ACC,0], [0,0,?VAR_ACC]]),
-    Zs = [mk(Mod, [[random_accel()], [random_accel()], [random_accel()]])
-          || _ <- lists:seq(1, N)],
+    H = mk(Mod, imu_h()),
+    R = mk(Mod, imu_r()),
     Step = fun(Z, State) -> kalman_bench:kf(Mod, State, F, H, Q, R, Z) end,
     time_steps(Step, initial_state(Mod), Zs);
 run_path(Mod, uwb, N) ->
-    _ = rand:seed(exsss, ?RAND_SEED),
+    Models = maps:from_list([{A, range_model(Mod, A)} || A <- ?ANCHORS]),
+    Ms = [{maps:get(A, Models), mk(Mod, [[Z]])} || {A, Z} <- range_readings(N)],
     {F, Q} = motion_model(Mod, ?DT_UWB),
     %% Linear prediction, passed in the function form ekf/7 expects.
     FJf = {fun(X) -> Mod:'*'(F, X) end, fun(_) -> F end},
     R = mk(Mod, [[?VAR_RANGE]]),
-    Models = list_to_tuple([range_model(Mod, A) || A <- ?ANCHORS]),
-    NModels = tuple_size(Models),
-    Ms = [{element(I rem NModels + 1, Models), mk(Mod, [[random_range()]])}
-          || I <- lists:seq(0, N-1)],
     Step = fun({HJh, Z}, State) -> kalman_bench:ekf(Mod, State, FJf, HJh, Q, R, Z) end,
     time_steps(Step, initial_state(Mod), Ms).
+
+imu_h() ->
+    [[0,0,1,0,0,0,0,0,0],
+     [0,0,0,0,0,1,0,0,0],
+     [0,0,0,0,0,0,0,0,1]].
+
+imu_r() ->
+    [[?VAR_ACC,0,0], [0,?VAR_ACC,0], [0,0,?VAR_ACC]].
+
+%% The seeded input streams, as plain floats. Every backend converts
+%% the same stream to its own format, so all see identical inputs.
+imu_readings(N) ->
+    _ = rand:seed(exsss, ?RAND_SEED),
+    [[random_accel() || _ <- [x, y, z]] || _ <- lists:seq(1, N)].
+
+%% [{Anchor, Range}], anchors taken round-robin.
+range_readings(N) ->
+    _ = rand:seed(exsss, ?RAND_SEED),
+    Anchors = list_to_tuple(?ANCHORS),
+    [{element(I rem tuple_size(Anchors) + 1, Anchors), random_range()}
+     || I <- lists:seq(0, N-1)].
 
 %% Stand-ins for noisy sensor readings, in plausible physical ranges
 %% (accelerations of a walking/driving target, ranges inside the
@@ -110,6 +174,10 @@ random_range() ->
 %% Constant-acceleration model: F and Q are block-diagonal, one 3x3
 %% block per axis. Q is the discrete white-jerk process noise.
 motion_model(Mod, DT) ->
+    {F, Q} = motion_lists(DT),
+    {mk(Mod, F), mk(Mod, Q)}.
+
+motion_lists(DT) ->
     FBlock = [[1, DT, DT*DT/2],
               [0, 1,  DT],
               [0, 0,  1]],
@@ -117,7 +185,7 @@ motion_model(Mod, DT) ->
               [[math:pow(DT,5)/20, math:pow(DT,4)/8, math:pow(DT,3)/6],
                [math:pow(DT,4)/8,  math:pow(DT,3)/3, math:pow(DT,2)/2],
                [math:pow(DT,3)/6,  math:pow(DT,2)/2, DT]]],
-    {mk(Mod, block_diag3(FBlock)), mk(Mod, block_diag3(QBlock))}.
+    {block_diag3(FBlock), block_diag3(QBlock)}.
 
 block_diag3(B) ->
     [[case I div 3 =:= J div 3 of
@@ -145,13 +213,47 @@ range_model(Mod, {Ax, Ay, Az}) ->
     end,
     {H, Jh}.
 
+%% The same model for blasws/kfblas: from the predicted state binary,
+%% returns {h(Xp), Jh(Xp)} as float64 binaries.
+range_bins(<<Px:64/native-float, _:16/binary, Py:64/native-float, _:16/binary,
+             Pz:64/native-float, _/binary>>, {Ax, Ay, Az}) ->
+    {Dx, Dy, Dz} = {Px - Ax, Py - Ay, Pz - Az},
+    Rng = range(Dx, Dy, Dz),
+    {<<Rng:64/native-float>>,
+     f64([Dx/Rng, 0.0, 0.0, Dy/Rng, 0.0, 0.0, Dz/Rng, 0.0, 0.0])}.
+
 range(Dx, Dy, Dz) ->
     max(math:sqrt(Dx*Dx + Dy*Dy + Dz*Dz), ?MIN_RANGE).
 
 %% At rest in the middle of the anchor area, unit covariance.
 initial_state(Mod) ->
-    X0 = mk(Mod, [[5.0], [0], [0], [5.0], [0], [0], [1.5], [0], [0]]),
-    {X0, Mod:eye(9)}.
+    {mk(Mod, [[X] || X <- x0()]), Mod:eye(9)}.
+
+x0() ->
+    [5.0, 0, 0, 5.0, 0, 0, 1.5, 0, 0].
+
+%% A blasws/kfblas filter with the motion model and initial state set
+%% (P0 = I is new/2's default). Sized for up to 3 measurements (IMU).
+engine_filter(Eng, DT) ->
+    {F, Q} = motion_lists(DT),
+    Filter = Eng:new(9, 3),
+    ok = Eng:set_model(Filter, f64(F), f64(Q)),
+    ok = Eng:set_state(Filter, f64(x0()), f64(eye_lists(9))),
+    Filter.
+
+engine_result(Eng, {Times, Filter}) ->
+    {X, P} = Eng:get_state(Filter),
+    {Times, {floats(X), floats(P)}}.
+
+eye_lists(N) ->
+    [[case I of J -> 1; _ -> 0 end || J <- lists:seq(1, N)] || I <- lists:seq(1, N)].
+
+%% Row-major native float64 binary of a (nested) list of numbers.
+f64(L) ->
+    << <<(float(X)):64/native-float>> || X <- lists:flatten(L) >>.
+
+floats(Bin) ->
+    [X || <<X:64/native-float>> <= Bin].
 
 %% Prints Path as base64, wrapped at 76 chars/line, between clear
 %% markers. On the host: capture your serial terminal's scrollback

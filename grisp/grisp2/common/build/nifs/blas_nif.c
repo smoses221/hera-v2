@@ -12,6 +12,10 @@
  *    ERTS/RTEMS symbols.
  *  - Fixed the ?gemm array bounds check, which sized a and b as m x n
  *    and so rejected every valid non-square product (marked "hera:").
+ *  - Fixed char argument decoding (e.g. uplo), which wrote into a string
+ *    literal (marked "hera:"). Note ?gemv's bounds check has the same
+ *    kind of bug as ?gemm had (x/y/a sized with the wrong dimension);
+ *    it is left as is, blasws uses dgemm for matrix-vector products.
  */
 #ifndef BLAS_DYNAMIC_NIF
 #define STATIC_ERLANG_NIF 1
@@ -1197,7 +1201,9 @@ int translate(ErlNifEnv* env, const ERL_NIF_TERM* terms, const etypes* format, .
 
             case e_char: {
                 char* c_dest = va_arg(valist, char*);
-                char* buff = "0";
+                // hera: upstream wrote the atom into the string literal "0"
+                // (undefined behaviour; faults where literals are read-only).
+                char buff[2] = "0";
                 enif_get_atom(env, terms[curr], buff, 2, ERL_NIF_LATIN1);
                 c_dest[0] = buff[0];
             break;}

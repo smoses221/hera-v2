@@ -5,3 +5,8 @@ stage,backend,path,n,min_us,mean_us,median_us,max_us,stddev_us
 9x9-oldmat-otp29-toolchain1.1.0,oldmat,uwb_ekf_1x9,20000,3093,3704.273,3239.000,12341,801.208
 9x9-blasv1-otp29-toolchain1.1.0,blasmat,imu_kf_3x9,20000,752,1264.080,821.000,30530,1542.807
 9x9-blasv1-otp29-toolchain1.1.0,blasmat,uwb_ekf_1x9,20000,759,1269.846,845.000,39633,1615.391
+9x9-blasv2-otp29-toolchain1.1.0,blasws,imu_kf_3x9,20000,180,210.759,194.000,20489,405.451
+9x9-blasv2-otp29-toolchain1.1.0,blasws,uwb_ekf_1x9,20000,197,228.545,212.000,16853,237.385
+9x9-blasv3-otp29-toolchain1.1.0,kfblas,imu_kf_3x9,20000,57,61.194,60.000,19206,135.536
+9x9-blasv3-otp29-toolchain1.1.0,kfblas,uwb_ekf_1x9,20000,62,73.181,65.000,16270,195.761
+9x9-blasv3-otp29-toolchain1.1.0,kfblas,uwb_ekf_range_1x9,20000,42,43.674,43.000,446,5.831
