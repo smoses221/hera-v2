@@ -1,4 +1,8 @@
+/* Static NIF on GRiSP; with -DNUMERL_DYNAMIC_NIF a host .so for tests
+ * (c_src/Makefile). */
+#ifndef NUMERL_DYNAMIC_NIF
 #define STATIC_ERLANG_NIF 1
+#endif
 
 #include <erl_nif.h>
 #include <stdio.h>

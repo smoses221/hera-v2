@@ -5,8 +5,9 @@
 %Matrices are represented as such:
 %-record(matrix, {n_rows, n_cols, bin}).
 
+%% Static NIF on GRiSP (path ignored), priv/numerl_nif.so on the host.
 init()->
-    ok  = erlang:load_nif(atom_to_list(?MODULE), 0).
+    ok  = erlang:load_nif(filename:join(code:priv_dir(hera), "numerl_nif"), 0).
 
 %Creates a random matrix.
 rnd_matrix(N)->
