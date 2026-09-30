@@ -8,7 +8,7 @@
 -export([matrix/1,to_array/1]).
 
 -export_type([matrix/0]).
-
+%% BLAS v1. Not optimal for kalman given every operation runs seperatly.
 %% Same API as mat.erl, backed by the erlef/blas NIF (vendored as
 %% src/blas.erl + grisp/grisp2/common/build/nifs/blas_nif.c).
 %%
