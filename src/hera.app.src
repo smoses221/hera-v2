@@ -8,9 +8,9 @@
     stdlib,
     grisp
    ]},
-  {env, [{log_data, false}, {start_com, false}]},
+  {env, [{log_data, false}, {start_com, true}]},
   {modules, [hera, hera_sup, hera_data, hera_com,
-    hera_measure_sup, hera_measure,
+    hera_measure_sup, hera_measure, hera_nav, nav_calib, hera_uwb, uwb_twr,
     kalman, mat, oldmat, blasmat, blasws, kfblas, blas, chain, timeEst,
     kalman_bench, bench_runner]},
   {licenses, ["Apache 2.0"]},
