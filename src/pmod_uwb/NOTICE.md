@@ -14,6 +14,11 @@ Local changes (marked `hera:` in the code):
 - `duty_cycle_non_beacon.erl`: two `-spec`s with an unbound type variable
   (`MacTXState`/`MacTxState`), which is a compile error on OTP 29. Only the
   specs changed, not the code.
+- `duty_cycle_non_beacon.erl`, `rx_loop_on/1`: ARX2INIT (automatic transition to
+  INIT after each reception) is off by default instead of always on. On the board,
+  ranging intervals that span a reception came out tens of ms short. The suspected
+  cause is the DW1000 timebase stopping in INIT. `application:set_env(hera,
+  uwb_arx2init, true)` restores upstream's behaviour, for comparison.
 
 Also copied, for host tests: `test/mock_phy_network.erl`, `test/network_simulation.erl`
 and `test/pmod_uwb_registers.erl` (upstream `test/`). Only their `-include` path

@@ -139,7 +139,15 @@ rx_loop_on(State) ->
     SniffOffT = State#state.sniff_offt,
     PhyMod:write(tx_fctrl, #{tr => 1}),
     PhyMod:write(sys_cfg, #{rxwtoe => 0}),
-    PhyMod:write(pmsc, #{pmsc_ctrl1 => #{arx2init => 2#1}}),
+    % hera: upstream always set arx2init (auto RX -> INIT, to save power).
+    % In INIT the DW1000 timebase seems to stop, which corrupts ranging
+    % intervals that span a reception (see REDESIGN_LOG.md, DS-TWR on the
+    % board). Off by default; {hera, uwb_arx2init, true} restores upstream.
+    Arx2Init = case application:get_env(hera, uwb_arx2init, false) of
+                   true -> 2#1;
+                   false -> 2#0
+               end,
+    PhyMod:write(pmsc, #{pmsc_ctrl1 => #{arx2init => Arx2Init}}),
     PhyMod:write(rx_sniff, #{sniff_ont => SniffOnT, sniff_offt => SniffOffT}),
     spawn_link(fun() -> rx_loop(PhyMod) end).
 

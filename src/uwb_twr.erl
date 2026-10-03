@@ -3,9 +3,9 @@
 -behaviour(gen_statem).
 
 -export([start_tag/1, start_anchor/1, start/1, start_link/1, stop/0]).
--export([range/2, stats/0]).
+-export([range/2, stats/0, last_exchange/0]).
 -export([rx_callback/4]).
--export([distance/2]).
+-export([distance/2, intervals/2]).
 -export([init/1, callback_mode/0, terminate/3]).
 -export([idle/3, wait_report/3, wait_final/3]).
 
@@ -81,6 +81,14 @@ range(Anchor, Timeout) ->
 stats() ->
     gen_statem:call(?MODULE, stats).
 
+%% The tag's last completed exchange, for diagnosing the hardware: the
+%% raw timestamps and the four intervals in microseconds. Expect
+%% reply1 = the anchor's ACK turnaround (well under 1 ms), round1 =
+%% reply1 + 2 * ToF (a few ns more), and reply2/round2 both about the
+%% ~100 ms the stack sleeps after POLL, again 2 * ToF apart.
+last_exchange() ->
+    gen_statem:call(?MODULE, last_exchange).
+
 %% Input callback of the IEEE 802.15.4 stack (runs in its event
 %% process): forward every received frame to the ranging process.
 rx_callback(Frame, _LQI, _Security, Ranging) ->
@@ -94,11 +102,8 @@ rx_callback(Frame, _LQI, _Security, Ranging) ->
 %%         / (Tround1 + Tround2 + Treply1 + Treply2)
 -spec distance({integer(), integer(), integer()}, {integer(), integer(), integer()}) ->
     {ok, float()} | {error, bad_timestamps}.
-distance({PollTx, RespRx, FinalTx}, {PollRx, RespTx, FinalRx}) ->
-    TRound1 = interval(PollTx, RespRx),   % tag:    POLL out -> ACK in
-    TReply1 = interval(PollRx, RespTx),   % anchor: POLL in  -> ACK out
-    TRound2 = interval(RespTx, FinalRx),  % anchor: ACK out  -> FINAL in
-    TReply2 = interval(RespRx, FinalTx),  % tag:    ACK in   -> FINAL out
+distance(TagTs, AnchorTs) ->
+    {TRound1, TReply1, TRound2, TReply2} = intervals(TagTs, AnchorTs),
     Sum = TRound1 + TRound2 + TReply1 + TReply2,
     case Sum > 0 of
         true ->
@@ -107,6 +112,14 @@ distance({PollTx, RespRx, FinalTx}, {PollRx, RespTx, FinalRx}) ->
         false ->
             {error, bad_timestamps}
     end.
+
+%% The four DS-TWR intervals, in DW1000 time units:
+%% {Tround1, Treply1, Tround2, Treply2}.
+intervals({PollTx, RespRx, FinalTx}, {PollRx, RespTx, FinalRx}) ->
+    {interval(PollTx, RespRx),    % Tround1, tag:    POLL out -> ACK in
+     interval(PollRx, RespTx),    % Treply1, anchor: POLL in  -> ACK out
+     interval(RespTx, FinalRx),   % Tround2, anchor: ACK out  -> FINAL in
+     interval(RespRx, FinalTx)}.  % Treply2, tag:    ACK in   -> FINAL out
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% gen_statem callbacks
@@ -150,8 +163,10 @@ idle(EventType, Event, Data) ->
 
 wait_report(cast, {rx, {_, #mac_header{src_addr = Anchor},
                         <<"REPORT", PollRx:40, RespTx:40, FinalRx:40>>}, _},
-            Data = #{anchor := Anchor, tag_ts := TagTs, from := From}) ->
-    case distance(TagTs, {PollRx, RespTx, FinalRx}) of
+            Data0 = #{anchor := Anchor, tag_ts := TagTs, from := From}) ->
+    AnchorTs = {PollRx, RespTx, FinalRx},
+    Data = Data0#{last => exchange_info(Anchor, TagTs, AnchorTs)},
+    case distance(TagTs, AnchorTs) of
         {ok, D} ->
             {next_state, idle, done(count(ok, Data)), [{reply, From, {ok, D}}]};
         {error, Reason} ->
@@ -171,9 +186,9 @@ wait_final(cast, {rx, {_, #mac_header{src_addr = Tag}, <<"FINAL">>},
            Data = #{tag := Tag, anchor_ts := {PollRx, RespTx}}) ->
     Report = <<"REPORT", PollRx:40, RespTx:40, FinalRx:40>>,
     {Frame, Data1} = frame(Tag, ?DISABLED, Report, Data),
-    _ = ieee802154:transmission(Frame),
+    _ = ieee802154:transmission(Frame), %TODO Does this need to be check for errors?
     {next_state, idle, count(reports, maps:without([tag, anchor_ts], Data1))};
-%% A new POLL (the previous FINAL was lost): restart from idle.
+%% A new POLL (the previous FINAL was lost): restart from idle. This assumes only one tag will range at a time.
 wait_final(cast, {rx, {_, _, <<"POLL">>}, _}, Data) ->
     {next_state, idle, maps:without([tag, anchor_ts], Data), [postpone]};
 wait_final(state_timeout, no_final, Data) ->
@@ -184,6 +199,8 @@ wait_final(EventType, Event, Data) ->
 %% In any state: stats, and other frames are ignored.
 common({call, From}, stats, #{stats := Stats}) ->
     {keep_state_and_data, [{reply, From, Stats}]};
+common({call, From}, last_exchange, Data) ->
+    {keep_state_and_data, [{reply, From, maps:get(last, Data, none)}]};
 common({call, From}, {range, _, _}, _Data) ->
     {keep_state_and_data, [{reply, From, {error, busy}}]};
 common(cast, {rx, _, _}, _Data) ->
@@ -227,7 +244,7 @@ setup_radio(Opts) ->
 poll_final(Anchor, Data) ->
     {Poll, Data1} = frame(Anchor, ?ENABLED, <<"POLL">>, Data),
     case ieee802154:transmission(Poll, ?ALL_RANGING) of
-        {ok, #ranging_informations{ranging_received = true,
+        {ok, #ranging_informations{ranging_received = ?ALL_RANGING,
                                    ranging_counter_start = PollTx,
                                    ranging_counter_stop = RespRx}} ->
             {Final, Data2} = frame(Anchor, ?DISABLED, <<"FINAL">>, Data1),
@@ -250,6 +267,14 @@ frame(Dest, AckReq, Payload, Data = #{addr := Addr, pan := Pan, seq := Seq}) ->
     MH = #mac_header{seqnum = Seq, src_pan = Pan, src_addr = Addr,
                      dest_pan = Pan, dest_addr = Dest},
     {{FC, MH, Payload}, Data#{seq := (Seq + 1) rem 256}}.
+
+exchange_info(<<Anchor:16>>, TagTs, AnchorTs) ->
+    {R1, T1, R2, T2} = intervals(TagTs, AnchorTs),
+    Us = fun(Ticks) -> Ticks * ?TU * 1.0e6 end,
+    #{anchor => Anchor, tag_ts => TagTs, anchor_ts => AnchorTs,
+      intervals_us => #{round1 => Us(R1), reply1 => Us(T1),
+                        round2 => Us(R2), reply2 => Us(T2)},
+      distance => distance(TagTs, AnchorTs)}.
 
 %% Interval from A to B on a 40-bit wrapping counter.
 interval(A, B) ->
