@@ -1,0 +1,1 @@
+rpc:call('hera@grisp-001300', hera, start_measure, [#{correction => #{1 => {1.0, 0.3498048842428668}, 2 => {1.0, 0.5084562996859621}}}]).
