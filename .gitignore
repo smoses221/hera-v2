@@ -27,3 +27,5 @@ grisp/default/common/deploy/files/wpa_supplicant.conf
 input.txt
 BENCHMARKING_LOG.md
 REDESIGN_LOG.md
+
+releases
