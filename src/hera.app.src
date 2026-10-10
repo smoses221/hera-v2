@@ -6,7 +6,8 @@
   {applications,
    [kernel,
     stdlib,
-    grisp
+    grisp,
+    grisp_updater_grisp2
    ]},
   {env, [{log_data, false}, {start_com, true}, {uwb_arx2init, false}]},
   {modules, [hera, hera_sup, hera_data, hera_com,
