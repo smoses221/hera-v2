@@ -6,7 +6,9 @@ BOARDS   ?= grisp-001316 grisp-001300 grisp-002075 grisp-001021 grisp-001024
 HOST_IP  ?= 10.42.0.1
 PORT     ?= 8000
 
-NODES    = $(foreach B,$(BOARDS),$(APP)@$(B))
+# Must match -sname in grisp/grisp2/common/deploy/files/grisp.ini.mustache
+NODE     ?= board
+NODES    = $(foreach B,$(BOARDS),$(NODE)@$(B))
 VERSION  = $(shell sed -n 's/.*{vsn, *"\([^"]*\)"}.*/\1/p' $(APP_SRC))
 PACKAGE  = _grisp/update/grisp2.$(APP).$(VERSION).tar
 REL_DIR  = releases/$(APP)/$(VERSION)
