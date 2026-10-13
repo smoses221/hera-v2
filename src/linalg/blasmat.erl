@@ -10,7 +10,7 @@
 -export_type([matrix/0]).
 %% BLAS v1. Not optimal for kalman given every operation runs seperatly.
 %% Same API as mat.erl, backed by the erlef/blas NIF (vendored as
-%% src/blas.erl + grisp/grisp2/common/build/nifs/blas_nif.c).
+%% src/linalg/erlef_blas/blas.erl + grisp/grisp2/common/build/nifs/blas_nif.c).
 %%
 %% A matrix is an immutable Erlang binary of row-major native float64s.
 %% BLAS works in place on mutable c_binaries, so every BLAS-backed

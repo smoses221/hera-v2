@@ -8,7 +8,7 @@ Copied: the DW1000 driver (`pmod_uwb.erl`) and the IEEE 802.15.4 stack
 
 Not copied: `robot.erl`, `robot_sup.erl` and `robot.app.src` (the example
 application of the upstream GRiSP project), and `ranging/` (replaced by
-`src/uwb_twr.erl`, see `REDESIGN_LOG.md`).
+`src/sensors/uwb_twr.erl`, see `REDESIGN_LOG.md`).
 
 Local changes (marked `hera:` in the code):
 - `duty_cycle_non_beacon.erl`: two `-spec`s with an unbound type variable

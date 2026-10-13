@@ -33,8 +33,8 @@
 %%   - One process plays both roles: a tag calls range/2, an anchor
 %%     only answers POLLs. stats/0 counts results, for the thesis.
 
--include("pmod_uwb/mac_frame.hrl").
--include("pmod_uwb/ieee802154.hrl").
+-include("../pmod_uwb/mac_frame.hrl").
+-include("../pmod_uwb/ieee802154.hrl").
 
 -define(TU, 15.65e-12).                % s per DW1000 time unit
 -define(C, 299792458.0).               % m/s
