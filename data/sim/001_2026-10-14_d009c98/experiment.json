@@ -1,0 +1,53 @@
+{
+  "number": 1,
+  "name": "001_2026-10-14_d009c98",
+  "created": "2026-10-14T15:42:13+02:00",
+  "command": "python3 sim/run.py --all --mode both --comment 'baseline on laptop'",
+  "git": {
+    "commit": "d009c98ab3e53c131e81b9eec67c4dcc5a1872bf",
+    "short": "d009c98",
+    "describe": "d009c98",
+    "dirty": false
+  },
+  "tag": null,
+  "scenarios": [
+    "circle",
+    "line",
+    "random_smooth",
+    "rectangle",
+    "static"
+  ],
+  "seeds": [
+    1,
+    2,
+    3
+  ],
+  "modes": [
+    "offline",
+    "live"
+  ],
+  "filter_set": {},
+  "status": "done",
+  "runs": [
+    "circle_s1_offline",
+    "circle_s2_offline",
+    "circle_s3_offline",
+    "line_s1_offline",
+    "line_s2_offline",
+    "line_s3_offline",
+    "random_smooth_s1_offline",
+    "random_smooth_s2_offline",
+    "random_smooth_s3_offline",
+    "rectangle_s1_offline",
+    "rectangle_s2_offline",
+    "rectangle_s3_offline",
+    "static_s1_offline",
+    "static_s2_offline",
+    "static_s3_offline",
+    "circle_s1_live",
+    "line_s1_live",
+    "random_smooth_s1_live",
+    "rectangle_s1_live",
+    "static_s1_live"
+  ]
+}

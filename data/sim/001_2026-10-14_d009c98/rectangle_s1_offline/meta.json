@@ -1,0 +1,106 @@
+{
+  "generator_version": 1,
+  "scenario": "rectangle",
+  "seed": 1,
+  "duration": 60.0,
+  "anchors": {
+    "1": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "2": [
+      4.0,
+      0.0,
+      0.0
+    ]
+  },
+  "init": {
+    "t0": 0.0,
+    "x0": [
+      0.7769798566033836,
+      0.0,
+      0.0,
+      1.1030153691756661,
+      0.0,
+      0.0,
+      -0.007165738777046269,
+      0.0,
+      0.0
+    ],
+    "yaw0": -0.039323326623631
+  },
+  "params": {
+    "duration": 60.0,
+    "truth_hz": 1000.0,
+    "truth_out_hz": 200.0,
+    "anchors": {
+      "1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "2": [
+        4.0,
+        0.0,
+        0.0
+      ]
+    },
+    "nav": {
+      "odr_hz": 117.7,
+      "acc_noise": 0.02,
+      "acc_bias_sigma": 0.02,
+      "gyro_noise": 0.003,
+      "gyro_bias_sigma": 0.001,
+      "mag_world": [
+        20.0,
+        0.0,
+        -44.0
+      ],
+      "mag_noise": 0.3
+    },
+    "uwb": {
+      "t_first": 0.25,
+      "interval": 0.47,
+      "interval_jitter": 0.005,
+      "range_noise": 0.03,
+      "bias": {
+        "1": 0.0,
+        "2": 0.0
+      },
+      "dropout": 0.003,
+      "nlos_prob": 0.0,
+      "nlos_mean": 0.3
+    },
+    "init": {
+      "pos_sigma": 0.1,
+      "z_sigma": 0.01,
+      "yaw_sigma": 0.02
+    }
+  },
+  "drawn": {
+    "acc_bias": [
+      0.04971360420013632,
+      0.022118885721895968,
+      -0.025114909539324798
+    ],
+    "gyro_bias": [
+      0.0004695239716900832,
+      0.0009554793497607905,
+      -0.000916938725057671
+    ],
+    "uwb_dropped": 0
+  },
+  "counts": {
+    "nav": 7062,
+    "uwb": 128
+  },
+  "git": {
+    "commit": "d009c98ab3e53c131e81b9eec67c4dcc5a1872bf",
+    "short": "d009c98",
+    "describe": "d009c98",
+    "dirty": false
+  },
+  "tag": null,
+  "experiment": "001_2026-10-14_d009c98"
+}
