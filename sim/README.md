@@ -22,12 +22,35 @@ Requirements: Erlang/OTP 27+ (for the `json` module) and rebar3, plus Python 3 w
 python3 sim/run.py --scenario circle --seed 1                 # offline, about 1 s
 python3 sim/run.py --scenario circle --seed 1 --mode live     # 2 hera nodes, real time (~65 s)
 python3 sim/run.py --all --mode both                          # all scenarios, seeds 1-3 offline + live seed 1
-python3 sim/run.py --scenario static --set sigma_acc=0.3 --tag sa03   # filter variant
-make sim SCENARIO=rectangle SEED=2 MODE=offline
-python3 sim/compare.py --out data/sim/summary_x data/sim/*/*  # compare any set of runs
+python3 sim/run.py --scenario static --set sigma_acc=0.3 --tag sa03 --comment "looser sigma_acc"
+make sim SCENARIO=rectangle SEED=2 MODE=offline COMMENT="after the FIFO change"
+make sim-all TAG=bias COMMENT="with bias states"
 ```
 
-Each run writes to `data/sim/<scenario>/s<seed>_<commit>[-dirty]_<mode>[_<tag>]/`. Running the same command again replaces that run.
+## Experiments
+
+Each `run.py` call is one experiment: a new numbered folder, so the folders sort in the order they were made.
+
+```
+data/sim/
+  001_2026-10-13_952b77a-dirty/
+    NOTES.md            comments: the --comment text, then anything you add
+    experiment.json     command, commit, filter overrides (--set), runs, status (running/done/failed)
+    summary/            runs.csv, summary.md (starts with the notes), rmse.png
+    circle_s1_offline/  one folder per run: inputs, estimate, metrics.json, plots
+    ...
+  002_2026-10-14_b97a8e7/
+  003_2026-10-15_c0ffee1_sa03/       --tag adds a label to the name
+  comparisons/2026-10-15_101500/     sim/compare.py across experiments
+```
+
+Comments:
+- `--comment "..."` starts the experiment's `NOTES.md`.
+- `python3 sim/experiments.py note 3 "what I noticed"` adds a dated note later. You can also edit `NOTES.md` by hand: everything under `## Notes` counts.
+- `python3 sim/experiments.py list` lists every experiment with its status, its number of runs and its first note.
+- `python3 sim/experiments.py show 3` prints the notes and the summary.
+
+To compare experiments, e.g. 001 against 004: `python3 sim/compare.py data/sim/001_*/*_s* data/sim/004_*/*_s*` (the output goes to `data/sim/comparisons/`).
 
 ## Setup simulated
 
@@ -52,7 +75,7 @@ All the parameters are in `generate.py`'s `DEFAULTS` and copied into `meta.json`
 
 - The seed fixes the trajectory, every noise draw and the filter's initial state. Each noise source has its own stream, spawned from the seed.
 - Offline runs are deterministic: the same seed and code give a byte-identical `estimate.csv`.
-- `meta.json → git` records the commit and `git describe --dirty`. If the tree is dirty, it also records the sha256 of `git diff HEAD` and the untracked files.
+- `meta.json → git` (and `experiment.json`) records the commit and whether the tree was dirty. If it was, it also records the sha256 of `git diff HEAD` and the untracked files. `data/sim/` itself is left out of this check, so new results don't make the next experiment dirty.
 - `erl_meta.json` records the OTP version, the backend, the md5 of every BEAM that ran, and the filter's effective configuration.
 
 ## Metrics (`evaluate.py`)

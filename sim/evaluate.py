@@ -73,10 +73,17 @@ def uwb_only(uwb, anchors, side):
 
 def footnote(fig, meta, mode):
     git = meta.get("git", {})
+    exp = f"exp {meta['experiment'].split('_')[0]} | " if meta.get("experiment") else ""
     fig.text(0.01, 0.005,
-             f"{meta['scenario']} | seed {meta['seed']} | {mode} | {git.get('describe', '?')}"
+             f"{exp}{meta['scenario']} | seed {meta['seed']} | {mode} | {git.get('describe', '?')}"
              f" | gen v{meta['generator_version']}",
              fontsize=7, color="0.4", ha="left", va="bottom")
+
+
+def experiment_of(run):
+    """The numbered experiment folder a run sits in (sim/experiments.py), if any."""
+    parent = Path(run).resolve().parent.name
+    return parent if parent[:3].isdigit() else None
 
 
 def evaluate(run_dir, plots=True):
@@ -113,6 +120,7 @@ def evaluate(run_dir, plots=True):
 
     settled = t_grid >= SETTLE_S
     metrics = {
+        "experiment": meta.get("experiment") or experiment_of(run),
         "scenario": meta["scenario"], "seed": meta["seed"], "mode": mode, "tag": meta.get("tag"),
         "git": meta.get("git", {}), "backend": erl.get("backend"),
         "module_md5": erl.get("module_md5"), "filter_cfg": erl.get("filter_cfg"),

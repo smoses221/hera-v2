@@ -4,10 +4,15 @@
   python3 sim/run.py --scenario circle --seed 1 --mode live    # two hera nodes
   python3 sim/run.py --all                                     # every scenario, seeds 1-3
   python3 sim/run.py --all --mode both                         # + live, seed 1
-  python3 sim/run.py --scenario static --set sigma_acc=0.3 --tag sa03
+  python3 sim/run.py --scenario static --set sigma_acc=0.3 --tag sa03 \
+                     --comment "does a looser sigma_acc help when still?"
 
-Each run goes to data/sim/<scenario>/s<seed>_<commit>[-dirty]_<mode>[_<tag>]/
-with its inputs, outputs, metrics and plots. meta.json records the git
+Every call is one experiment: a new numbered folder (sim/experiments.py)
+  data/sim/NNN_<date>_<commit>[-dirty][_<tag>]/
+    NOTES.md, experiment.json, summary/, <scenario>_s<seed>_<mode>/
+with one subfolder per run (inputs, outputs, metrics, plots). --comment
+starts NOTES.md; add notes later with `sim/experiments.py note NNN "..."` or
+by editing the file. meta.json records the git
 commit, `git describe --dirty`, and when the tree is dirty the sha256 of
 `git diff HEAD` and the untracked files, so a run can be traced to its code;
 erl_meta.json adds the md5 of every BEAM that ran.
@@ -35,6 +40,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import compare  # noqa: E402
 import evaluate  # noqa: E402
+import experiments  # noqa: E402
 from generate import generate  # noqa: E402
 from scenarios import SCENARIOS  # noqa: E402
 
@@ -49,12 +55,17 @@ def git(*args):
                           check=True).stdout.strip()
 
 
-def git_info():
-    status = git("status", "--porcelain")
+def git_info(results):
+    """The code's version. The results folder is left out of the dirty check
+    and of the diff: new experiments must not make the next one dirty."""
+    paths = ["--", "."]
+    if Path(results).resolve().is_relative_to(REPO):
+        paths.append(f":(exclude){Path(results).resolve().relative_to(REPO)}")
+    status = git("status", "--porcelain", *paths)
     info = {"commit": git("rev-parse", "HEAD"), "short": git("rev-parse", "--short", "HEAD"),
-            "describe": git("describe", "--always", "--dirty"), "dirty": bool(status)}
+            "describe": git("describe", "--always") + ("-dirty" if status else ""), "dirty": bool(status)}
     if status:
-        diff = subprocess.run(["git", "diff", "HEAD", "--binary"], cwd=REPO,
+        diff = subprocess.run(["git", "diff", "HEAD", "--binary", *paths], cwd=REPO,
                               capture_output=True, check=True).stdout
         info["diff_sha256"] = hashlib.sha256(diff).hexdigest()
         info["untracked"] = [line[3:] for line in status.splitlines() if line.startswith("??")]
@@ -71,17 +82,10 @@ def erl_cmd(*args):
     return ["erl", "-noshell", "-pa", *ebins, *args]
 
 
-def run_dir(out, scenario, seed, git_meta, mode, tag):
-    name = f"s{seed}_{git_meta['short']}{'-dirty' if git_meta['dirty'] else ''}_{mode}"
-    return Path(out) / scenario / (f"{name}_{tag}" if tag else name)
-
-
 def prepare(directory, scenario, seed, git_meta, filter_set, tag):
-    directory.mkdir(parents=True, exist_ok=True)
-    for stale in directory.iterdir():  # a rerun replaces the previous one
-        if stale.is_file():
-            stale.unlink()
-    generate(scenario, seed, directory, extra_meta={"git": git_meta, "tag": tag})
+    directory.mkdir(parents=True)
+    generate(scenario, seed, directory,
+             extra_meta={"git": git_meta, "tag": tag, "experiment": directory.parent.name})
     if filter_set:
         (directory / "filter.json").write_text(json.dumps(filter_set, indent=2) + "\n")
 
@@ -140,8 +144,9 @@ def main():
     ap.add_argument("--mode", choices=["offline", "live", "both"], default="offline")
     ap.add_argument("--all", action="store_true", help="every scenario, seeds 1 2 3 (live: seed 1 only)")
     ap.add_argument("--set", action="append", metavar="KEY=JSON", help="hera_fusion config override")
-    ap.add_argument("--tag", help="suffix of the run directories (use it with --set)")
-    ap.add_argument("--out", default=str(DEFAULT_OUT))
+    ap.add_argument("--tag", help="short label, added to the experiment folder's name")
+    ap.add_argument("--comment", help="first note of the experiment (NOTES.md)")
+    ap.add_argument("--out", default=str(DEFAULT_OUT), help="where experiments are numbered")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--no-plots", action="store_true")
     args = ap.parse_args()
@@ -152,31 +157,34 @@ def main():
     seeds = [1, 2, 3] if args.all else args.seed
     modes = ["offline", "live"] if args.mode == "both" else [args.mode]
     filter_set = parse_set(args.set)
-    if filter_set and not args.tag:
-        ap.error("--set needs --tag, so the runs don't overwrite the default ones")
 
     if not args.no_build:
         build()
-    git_meta = git_info()
+    git_meta = git_info(args.out)
     if git_meta["dirty"]:
         print(f"note: working tree is dirty ({git_meta['describe']}), recorded in meta.json")
 
     jobs = [(sc, seed, mode) for mode in modes for sc in scenarios for seed in seeds
             if not (args.all and mode == "live" and seed != 1)]
+    exp = experiments.create(args.out, git_meta, tag=args.tag, comment=args.comment, info={
+        "scenarios": scenarios, "seeds": seeds, "modes": modes, "filter_set": filter_set})
+    print(f"experiment {exp.relative_to(REPO) if exp.is_relative_to(REPO) else exp}", flush=True)
     dirs = []
-    for sc, seed, mode in jobs:
-        d = run_dir(args.out, sc, seed, git_meta, mode, args.tag)
-        prepare(d, sc, seed, git_meta, filter_set, args.tag)
-        print(f"[{mode}] {sc} seed {seed} -> {d.relative_to(REPO) if d.is_relative_to(REPO) else d}",
-              flush=True)
-        (run_offline if mode == "offline" else run_live)(d)
-        print("   ", evaluate.summary_line(evaluate.evaluate(d, plots=not args.no_plots)), flush=True)
-        dirs.append(d)
-
-    if len(dirs) > 1:
-        summary = compare.compare(dirs, Path(args.out) / f"summary_{git_meta['describe']}"
-                                  f"{'_' + args.tag if args.tag else ''}")
-        print(f"summary: {summary}")
+    try:
+        for sc, seed, mode in jobs:
+            d = exp / f"{sc}_s{seed}_{mode}"
+            prepare(d, sc, seed, git_meta, filter_set, args.tag)
+            print(f"[{mode}] {sc} seed {seed} -> {d.name}", flush=True)
+            (run_offline if mode == "offline" else run_live)(d)
+            print("   ", evaluate.summary_line(evaluate.evaluate(d, plots=not args.no_plots)), flush=True)
+            dirs.append(d)
+            experiments.update(exp, runs=[x.name for x in dirs])
+        compare.compare(dirs, exp / "summary")
+    except BaseException as e:
+        experiments.update(exp, status="failed", error=repr(e))
+        raise
+    experiments.update(exp, status="done")
+    print(f"summary: {exp / 'summary' / 'summary.md'}")
 
 
 if __name__ == "__main__":

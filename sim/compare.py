@@ -2,12 +2,16 @@
 
 Runs are grouped by (code version, mode, tag); each group gets one bar per
 scenario, the mean over its seeds, with the min..max range as error bar.
-Groups are compared on the same seeds only: per scenario, the summary and
-chart use the seeds every group has (runs.csv still lists every run).
+A group is an experiment (sim/experiments.py) and mode, plus the tag.
+summary.md uses every seed of each group (listed in its table). The chart
+compares groups on the same seeds only: per scenario, the seeds every group
+has, so a group with more seeds doesn't look different just for that.
 The UWB-only reference of each scenario is drawn alongside.
 
 Usage: python3 sim/compare.py [--out DIR] <run_dir> [<run_dir> ...]
-       python3 sim/compare.py --out data/sim/summary_x data/sim/*/*
+       python3 sim/compare.py data/sim/001_*/*_s* data/sim/004_*/*_s*   # 001 vs 004
+sim/run.py calls it on its own runs (<experiment>/summary/). Comparisons
+across experiments go by default to data/sim/comparisons/<date_time>/.
 Writes runs.csv (one line per run), summary.md and rmse.png into --out.
 """
 
@@ -15,15 +19,19 @@ import argparse
 import csv
 import json
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import matplotlib
 
+import experiments
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 COLUMNS = [
+    ("experiment", lambda m: m["experiment"] or ""),
     ("scenario", lambda m: m["scenario"]),
     ("seed", lambda m: m["seed"]),
     ("mode", lambda m: m["mode"]),
@@ -65,7 +73,11 @@ def load(dirs):
     for d in dirs:
         p = Path(d) / "metrics.json"
         if p.exists():
-            runs.append(json.loads(p.read_text()))
+            m = json.loads(p.read_text())
+            parent = Path(d).resolve().parent
+            m["experiment"] = m.get("experiment") or (parent.name if parent.name[:3].isdigit() else None)
+            m["_experiment_dir"] = parent if m["experiment"] == parent.name else None
+            runs.append(m)
     return runs
 
 
@@ -83,7 +95,8 @@ def compare(dirs, out):
         w.writerows({k: fmt(v) for k, v in r.items()} for r in rows)
 
     def label(r):
-        return " ".join(x for x in [r["commit"], r["mode"], r["tag"]] if x)
+        exp = f"#{r['experiment'].split('_')[0]}" if r["experiment"] else r["commit"]
+        return " ".join(x for x in [exp, r["mode"], r["tag"]] if x)
 
     scenarios = sorted({r["scenario"] for r in rows})
     common = {}
@@ -93,20 +106,23 @@ def compare(dirs, out):
             if r["scenario"] == sc:
                 seeds_by_group[label(r)].add(r["seed"])
         common[sc] = set.intersection(*seeds_by_group.values())
+    all_seeds = defaultdict(lambda: defaultdict(list))
     groups = defaultdict(lambda: defaultdict(list))
     uwb_ref = defaultdict(dict)
     for r in rows:
+        all_seeds[label(r)][r["scenario"]].append(r)
         if r["seed"] in common[r["scenario"]]:
             groups[label(r)][r["scenario"]].append(r)
             uwb_ref[r["scenario"]][r["seed"]] = r["uwb_only_settled_rmse_cm"]
     uwb_ref = {sc: list(v.values()) for sc, v in uwb_ref.items()}
 
-    md = ["Seeds compared per scenario: " + ", ".join(
-              f"{sc} {sorted(common[sc]) or 'none in common'}" for sc in scenarios), "",
-          "| group | scenario | seeds | settled 2D RMSE (cm) | p95 (cm) | z RMSE (cm) | yaw RMSE (°) "
+    md = []
+    for exp_dir in sorted({m["_experiment_dir"] for m in runs if m["_experiment_dir"]}):
+        md += [f"**{exp_dir.name}**", ""] + (experiments.notes(exp_dir) or ["(no notes)"]) + [""]
+    md += ["| group | scenario | seeds | settled 2D RMSE (cm) | p95 (cm) | z RMSE (cm) | yaw RMSE (°) "
           "| NEES | in 3σ (%) | UWB-only RMSE (cm) |",
           "|---|---|---|---|---|---|---|---|---|---|"]
-    for label, by_sc in groups.items():
+    for label, by_sc in all_seeds.items():
         for sc in scenarios:
             rs = by_sc.get(sc)
             if not rs:
@@ -114,10 +130,12 @@ def compare(dirs, out):
 
             def mean(k):
                 return np.nanmean([r[k] for r in rs])
-            md.append(f"| {label} | {sc} | {len(rs)} | {mean('settled_rmse_cm'):.1f} | "
+            md.append(f"| {label} | {sc} | {','.join(str(r['seed']) for r in rs)} | {mean('settled_rmse_cm'):.1f} | "
                       f"{mean('settled_p95_cm'):.1f} | {mean('z_rmse_cm'):.1f} | {mean('yaw_rmse_deg'):.2f} | "
                       f"{mean('nees2d_mean'):.2f} | {mean('inside_3sigma_pct'):.1f} | "
                       f"{mean('uwb_only_settled_rmse_cm'):.1f} |")
+    md += ["", "rmse.png compares the seeds every group has: " + ", ".join(
+        f"{sc} {sorted(common[sc]) or 'none in common'}" for sc in scenarios) + "."]
     (out / "summary.md").write_text("\n".join(md) + "\n")
 
     labels = list(groups) + ["UWB only"]
@@ -144,7 +162,7 @@ def compare(dirs, out):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", default="data/sim/summary")
+    ap.add_argument("--out", default=str(experiments.DEFAULT_ROOT / "comparisons" / f"{datetime.now():%Y-%m-%d_%H%M%S}"))
     ap.add_argument("dirs", nargs="+")
     a = ap.parse_args()
     print(compare(a.dirs, a.out))
