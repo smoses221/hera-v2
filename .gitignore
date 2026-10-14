@@ -29,3 +29,6 @@ BENCHMARKING_LOG.md
 REDESIGN_LOG.md
 
 releases
+
+# Python
+/sim/__pycache__

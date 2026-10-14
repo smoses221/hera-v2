@@ -15,7 +15,7 @@ REL_DIR  = releases/$(APP)/$(VERSION)
 URL      = http://$(HOST_IP):$(PORT)/$(APP)/$(VERSION)
 FLEET    = escript scripts/grisp_fleet.escript $(COOKIE)
 
-.PHONY: release bump pack push reboot validate info
+.PHONY: release bump pack push reboot validate info sim sim-all
 
 # Bump the patch version, build the update package, push it and reboot the boards
 release: bump pack push reboot
@@ -55,3 +55,15 @@ validate:
 
 info:
 	$(FLEET) info -- $(NODES)
+
+# Simulated experiments (sim/README.md), e.g. make sim SCENARIO=circle SEED=1 MODE=live
+SCENARIO ?= circle
+SEED     ?= 1
+MODE     ?= offline
+
+sim:
+	python3 sim/run.py --scenario $(SCENARIO) --seed $(SEED) --mode $(MODE)
+
+# Every scenario offline with seeds 1-3, plus live with seed 1
+sim-all:
+	python3 sim/run.py --all --mode both
