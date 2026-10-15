@@ -1,0 +1,57 @@
+{
+  "board_dir": "/sim/003_2026-10-15_8227c32_circle_s1_board",
+  "clock": {
+    "board@grisp-001300": {
+      "max_error_ms": 1.2125,
+      "offset_ms": -1224084831919,
+      "offset_us": -1224084831918934,
+      "rtt_us": 2425,
+      "samples": 20
+    },
+    "board@grisp-001316": {
+      "max_error_ms": 1.3125,
+      "offset_ms": -1224085111761,
+      "offset_us": -1224085111760754,
+      "rtt_us": 2625,
+      "samples": 20
+    }
+  },
+  "code_loaded_from_host": false,
+  "done": {
+    "board@grisp-001300": {
+      "role": "tag",
+      "stats": {},
+      "status": "ok"
+    },
+    "board@grisp-001316": {
+      "role": "master",
+      "stats": {
+        "foreign_nodes": [],
+        "late": 0,
+        "polls": 27455,
+        "received": {
+          "nav": 7039,
+          "uwb": 127
+        },
+        "seq_gaps": {
+          "nav": 23,
+          "uwb": 1
+        }
+      },
+      "status": "ok"
+    }
+  },
+  "master": "board@grisp-001316",
+  "releases": {
+    "board@grisp-001300": {
+      "hera_vsn": "1.0.0",
+      "release": "hera 1.0.7"
+    },
+    "board@grisp-001316": {
+      "hera_vsn": "1.0.0",
+      "release": "hera 1.0.7"
+    }
+  },
+  "tag": "board@grisp-001300"
+}
+

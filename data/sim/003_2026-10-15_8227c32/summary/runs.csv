@@ -1,0 +1,2 @@
+experiment,scenario,seed,mode,tag,commit,rmse_cm,settled_rmse_cm,settled_p95_cm,max_cm,final_cm,z_rmse_cm,vel_rmse_cms,yaw_rmse_deg,nees2d_mean,inside_3sigma_pct,nav_only_10s_cm,nav_only_end_m,uwb_only_settled_rmse_cm,nav_delivered_pct,uwb_delivered_pct,nav_stamp_err_ms,uwb_stamp_err_ms
+003_2026-10-15_8227c32,circle,1,board,,8227c32,8.52,8.29,14.59,24.64,1.36,1.05,9.43,3.95,0.92,100.00,184.35,8.95,28.22,99.67,99.22,1.06,4.95

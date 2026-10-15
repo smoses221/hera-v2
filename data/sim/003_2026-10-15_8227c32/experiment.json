@@ -1,0 +1,27 @@
+{
+  "number": 3,
+  "name": "003_2026-10-15_8227c32",
+  "created": "2026-10-15T17:49:54+02:00",
+  "command": "python3 sim/run.py --mode board --scenario circle --seed 1 --master grisp-001316 --tag-board grisp-001300 --cookie grisp --node board --load-code --comment 'first board run'",
+  "git": {
+    "commit": "8227c3282a66fe833c65ebbb34620c736fabb810",
+    "short": "8227c32",
+    "describe": "8227c32",
+    "dirty": false
+  },
+  "tag": null,
+  "scenarios": [
+    "circle"
+  ],
+  "seeds": [
+    1
+  ],
+  "modes": [
+    "board"
+  ],
+  "filter_set": {},
+  "status": "done",
+  "runs": [
+    "circle_s1_board"
+  ]
+}
