@@ -17,6 +17,9 @@
 %% hera_com multicasts on the LAN, so real boards running hera would
 %% otherwise feed the simulation. Others are counted in `foreign`.
 %%
+%% Samples already in hera_data when it starts (an earlier run on the same
+%% board) are ignored, and seq gaps count from each stream's first sample.
+%%
 %% Times are in seconds since the run's T0 (wall clock, ms), the same
 %% time base as the simulation's truth.
 %%
@@ -35,7 +38,11 @@ stop(Pid) ->
     Pid ! {stop, self()},
     receive
         {stopped, Pid, Stats} -> demonitor(Ref, [flush]), Stats;
-        {'DOWN', Ref, process, Pid, Reason} -> error({sim_fusion_died, Reason})
+        {'DOWN', Ref, process, Pid, Reason} ->
+            %% A caller trapping exits (sim_live on a board) has the real reason.
+            receive {'EXIT', Pid, Exit} -> error({sim_fusion_died, Exit})
+            after 0 -> error({sim_fusion_died, Reason})
+            end
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -45,8 +52,10 @@ stop(Pid) ->
 init(Cfg, T0, Dir, Sources) ->
     %% hera_data's timestamps are monotonic ms; the run's T0 is system ms.
     Offset = erlang:time_offset(millisecond) - T0,
+    Stale = maps:from_list([{{Name, Node}, Seq} || Name <- ?STREAMS,
+                                                   {Node, Seq, _, _} <- hera_data:get(Name)]),
     loop(#{fusion => hera_fusion:new(Cfg), offset => Offset, dir => Dir, sources => Sources,
-           foreign => #{}, last => #{}, gaps => #{}, received => #{},
+           foreign => #{}, last => Stale, seen => #{}, gaps => #{}, received => #{},
            rows => [], log => [], polls => 0}).
 
 loop(S) ->
@@ -72,9 +81,10 @@ poll(S = #{last := Last, offset := Offset, polls := Polls, sources := Sources}) 
     lists:foldl(fun apply_sample/2, S1, lists:sort(New)).
 
 apply_sample({T, Name, Node, Seq, Values}, S) ->
-    #{fusion := F0, last := Last, gaps := Gaps, received := Rec, rows := Rows, log := Log} = S,
+    #{fusion := F0, last := Last, seen := Seen, gaps := Gaps, received := Rec, rows := Rows,
+      log := Log} = S,
     Key = {Name, Node},
-    Prev = maps:get(Key, Last, 0),
+    Gap = case Seen of #{Key := true} -> Seq - maps:get(Key, Last) - 1; _ -> 0 end,
     F1 = case {Name, Values} of
         {nav, _} -> hera_fusion:nav(F0, T, Values);
         {uwb, [Index, Range]} -> hera_fusion:uwb(F0, T, Index, Range)
@@ -82,7 +92,8 @@ apply_sample({T, Name, Node, Seq, Values}, S) ->
     Wall = erlang:system_time(millisecond),
     S#{fusion := F1,
        last := Last#{Key => Seq},
-       gaps := Gaps#{Name => maps:get(Name, Gaps, 0) + (Seq - Prev - 1)},
+       seen := Seen#{Key => true},
+       gaps := Gaps#{Name => maps:get(Name, Gaps, 0) + Gap},
        received := Rec#{Name => maps:get(Name, Rec, 0) + 1},
        rows := [sim_replay:estimate_row(Name, F1) | Rows],
        log := [[atom_to_binary(Name), $,, atom_to_binary(Node), $,,

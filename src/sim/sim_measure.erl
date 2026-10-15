@@ -16,8 +16,10 @@
 %%
 %% To join what the master received with the truth, every sample sent is
 %% logged as `seq,t,wall_ms` (sent_<name>.csv in Dir), with seq the
-%% number hera_measure gives it. On fresh nodes hera_measure starts at
-%% seq 1 (init_seq), which this assumes.
+%% number hera_measure gives it. hera_measure doesn't tell its callback
+%% the seq, so first_seq/1 computes it the same way (init_seq): 1 on a
+%% fresh node, else one more than the last known on any node (a board
+%% that already ran a `nav` measure since it booted).
 %%
 %% Options:
 %%   file  the CSV          name  measure name (nav | uwb)
@@ -26,7 +28,7 @@
 
 init(#{file := File, name := Name, t0 := T0, dir := Dir}) ->
     {_, Rows} = sim_replay:read_csv(File),
-    {ok, #{rows => Rows, t0 => T0, seq => 1, sent => [],
+    {ok, #{rows => Rows, t0 => T0, seq => first_seq(Name), sent => [],
            log => filename:join(Dir, "sent_" ++ atom_to_list(Name) ++ ".csv")},
      #{name => Name, iter => length(Rows), timeout => 0}}.
 
@@ -38,6 +40,11 @@ measure(State = #{rows := [[T | Values] | Rest], t0 := T0, seq := Seq, sent := S
     NewState = State#{rows := Rest, seq := Seq + 1, sent := [{Seq, T, Now} | Sent]},
     Rest =:= [] andalso write_log(NewState),
     {ok, encode(Values), NewState}.
+
+%% As hera_measure:init_seq/1, which runs right after init/1.
+first_seq(Name) ->
+    {Res, _} = rpc:multicall(hera_data, get, [Name, node()]),
+    lists:max([0 | [S || [{_, S, _, _}] <- Res]]) + 1.
 
 %% hera_uwb sends the anchor index as an integer.
 encode([Index, Range]) -> [round(Index), Range];

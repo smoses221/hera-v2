@@ -94,6 +94,8 @@ The estimate is held from one update to the next and sampled at 100 Hz, which is
 
 ## Live mode: what it does and doesn't test
 
+To run it on two GRiSP boards over Wi-Fi instead (`--mode board`, `make sim-board`), see [BOARD.md](BOARD.md).
+
 Two local nodes run the real framework: `hera_measure`, `hera_com` multicast, and `hera_data`. The master gets its own NAV samples back through the multicast loopback, and the filter uses `hera_data`'s receipt timestamps. On one host the network takes about 1 ms and the clocks are shared, so live results stay close to offline. Board effects (Wi-Fi latency, SPI read time, clock offset between boards) are not simulated yet.
 
 `hera_com` multicasts on the first non-loopback interface. Real boards on that network receive the sim's samples, and theirs reach the sim. `sim_fusion` uses only the two sim nodes and reports any others in `foreign_nodes`.

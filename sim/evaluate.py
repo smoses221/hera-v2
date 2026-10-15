@@ -155,8 +155,10 @@ def evaluate(run_dir, plots=True):
                     "nav": int(np.sum(est["src"] == "nav")), "uwb": int(np.sum(est["src"] == "uwb"))},
         "late": erl.get("late"), "filter_wall_us": erl.get("filter_wall_us"),
     }
-    if mode == "live":
+    if mode in ("live", "board"):
         metrics["live"] = live_metrics(run, erl)
+    if (run / "board_meta.json").exists():
+        metrics["board"] = json.loads((run / "board_meta.json").read_text())
     (run / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
     if plots:

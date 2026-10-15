@@ -4,6 +4,8 @@
   python3 sim/run.py --scenario circle --seed 1 --mode live    # two hera nodes
   python3 sim/run.py --all                                     # every scenario, seeds 1-3
   python3 sim/run.py --all --mode both                         # + live, seed 1
+  python3 sim/run.py --scenario circle --mode board --master grisp-001316 --tag-board grisp-001300
+                                                               # on two GRiSP boards (sim/BOARD.md)
   python3 sim/run.py --scenario static --set sigma_acc=0.3 --tag sa03 \
                      --comment "does a looser sigma_acc help when still?"
 
@@ -124,8 +126,26 @@ def run_live(directory):
                          for r in failed)
         raise RuntimeError(f"live run failed on {failed} (a hera_com that can't open its socket "
                            f"retries forever: is a non-loopback IPv4 interface up?)\n{logs}")
-    # The NAV-only reference depends only on nav.csv, so it is computed offline.
+    nav_only(directory)
+
+
+def nav_only(directory):
+    """The NAV-only reference depends only on nav.csv, so it is computed offline."""
     subprocess.run(erl_cmd("-run", "sim_replay", "main", str(directory), "nav_only"), cwd=REPO, check=True)
+
+
+def board_node(name, node_prefix):
+    return name if "@" in name else f"{node_prefix}@{name}"
+
+
+def run_board(directory, args):
+    """The live simulation on two GRiSP boards, driven by sim_board (sim/BOARD.md)."""
+    opts = (["load"] if args.load_code else []) + ([f"root={args.board_root}"] if args.board_root else [])
+    subprocess.run(erl_cmd("-sname", f"sim_host_{os.getpid()}", "-hidden", "-setcookie", args.cookie,
+                           "-run", "sim_board", "main", str(directory),
+                           board_node(args.master, args.node), board_node(args.tag_board, args.node), *opts),
+                   cwd=REPO, check=True)
+    nav_only(directory)
 
 
 def parse_set(items):
@@ -143,12 +163,21 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--scenario", nargs="+", choices=sorted(SCENARIOS))
     ap.add_argument("--seed", nargs="+", type=int, default=[1])
-    ap.add_argument("--mode", choices=["offline", "live", "both"], default="offline")
+    ap.add_argument("--mode", choices=["offline", "live", "both", "board"], default="offline")
     ap.add_argument("--all", action="store_true", help="every scenario, seeds 1 2 3 (live: seed 1 only)")
     ap.add_argument("--set", action="append", metavar="KEY=JSON", help="hera_fusion config override")
     ap.add_argument("--tag", help="short label, added to the experiment folder's name")
     ap.add_argument("--comment", help="first note of the experiment (NOTES.md)")
     ap.add_argument("--out", default=str(DEFAULT_OUT), help="where experiments are numbered")
+    board = ap.add_argument_group("board mode (sim/BOARD.md)")
+    board.add_argument("--master", help="board running the NAV replay and the filter, e.g. grisp-001316")
+    board.add_argument("--tag-board", help="board running the UWB replay, e.g. grisp-001300")
+    board.add_argument("--node", default="board", help="node name on the boards (-sname in grisp.ini)")
+    board.add_argument("--cookie", default="grisp")
+    board.add_argument("--load-code", action="store_true",
+                       help="load this host's simulation BEAMs onto the boards instead of requiring "
+                            "the deployed release to match (lost at the next reboot)")
+    board.add_argument("--board-root", help="folder on the boards for the run's files (default /sim)")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--no-plots", action="store_true")
     args = ap.parse_args()
@@ -158,6 +187,8 @@ def main():
         ap.error("give --scenario or --all")
     seeds = [1, 2, 3] if args.all else args.seed
     modes = ["offline", "live"] if args.mode == "both" else [args.mode]
+    if args.mode == "board" and not (args.master and args.tag_board):
+        ap.error("--mode board needs --master and --tag-board")
     filter_set = parse_set(args.set)
 
     if not args.no_build:
@@ -167,7 +198,7 @@ def main():
         print(f"note: working tree is dirty ({git_meta['describe']}), recorded in meta.json")
 
     jobs = [(sc, seed, mode) for mode in modes for sc in scenarios for seed in seeds
-            if not (args.all and mode == "live" and seed != 1)]
+            if not (args.all and mode in ("live", "board") and seed != 1)]
     exp = experiments.create(args.out, git_meta, tag=args.tag, comment=args.comment, info={
         "scenarios": scenarios, "seeds": seeds, "modes": modes, "filter_set": filter_set})
     print(f"experiment {exp.relative_to(REPO) if exp.is_relative_to(REPO) else exp}", flush=True)
@@ -177,7 +208,8 @@ def main():
             d = exp / f"{sc}_s{seed}_{mode}"
             prepare(d, sc, seed, git_meta, filter_set, args.tag)
             print(f"[{mode}] {sc} seed {seed} -> {d.name}", flush=True)
-            (run_offline if mode == "offline" else run_live)(d)
+            {"offline": run_offline, "live": run_live,
+             "board": lambda x: run_board(x, args)}[mode](d)
             print("   ", evaluate.summary_line(evaluate.evaluate(d, plots=not args.no_plots)), flush=True)
             dirs.append(d)
             experiments.update(exp, runs=[x.name for x in dirs])

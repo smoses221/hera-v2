@@ -15,7 +15,7 @@ REL_DIR  = releases/$(APP)/$(VERSION)
 URL      = http://$(HOST_IP):$(PORT)/$(APP)/$(VERSION)
 FLEET    = escript scripts/grisp_fleet.escript $(COOKIE)
 
-.PHONY: release bump pack push reboot validate info sim sim-all sim-list
+.PHONY: release bump pack push reboot validate info sim sim-all sim-list sim-board
 
 # Bump the patch version, build the update package, push it and reboot the boards
 release: bump pack push reboot
@@ -70,6 +70,14 @@ sim:
 # Every scenario offline with seeds 1-3, plus live with seed 1
 sim-all:
 	python3 sim/run.py --all --mode both $(SIM_OPTS)
+
+# The live simulation on two boards (sim/BOARD.md), e.g.
+#   make sim-board MASTER=grisp-001316 TAG_BOARD=grisp-001300 SCENARIO=circle COMMENT="first board run"
+# LOAD_CODE=1 loads this host's simulation code onto the boards (until reboot).
+sim-board:
+	python3 sim/run.py --mode board --scenario $(SCENARIO) --seed $(SEED) \
+		--master $(MASTER) --tag-board $(TAG_BOARD) --cookie $(COOKIE) --node $(NODE) \
+		$(if $(LOAD_CODE),--load-code) $(SIM_OPTS)
 
 # List the experiments, with their first note
 sim-list:

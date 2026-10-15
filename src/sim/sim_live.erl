@@ -1,8 +1,10 @@
 -module(sim_live).
 
--export([main/1]).
+-export([main/1, board/4, read_chunk/3]).
 
-%% One node of a live simulation, started by sim/run.py:
+%% One node of a live simulation, started by sim/run.py, either
+%%
+%% on this host (mode live):
 %%   erl -sname M -setcookie C -noshell -run sim_live main master <Dir> <T0> <TagNode>
 %%   erl -sname T -setcookie C -noshell -run sim_live main tag    <Dir> <T0> <MasterNode>
 %%
@@ -16,11 +18,19 @@
 %% Samples are due at wall clock T0 + t (ms, erlang:system_time), the
 %% same on both nodes since they share the host's clock. Each node halts
 %% ?MARGIN_MS after the experiment's duration.
+%%
+%% or on two GRiSP boards (mode board), spawned by sim_board from the host:
+%%   board(Role, Dir, T0, Peer)
+%% The boards already run the hera application, so its hera_data, hera_com
+%% and hera_measure_sup are used as they are. T0 is given in each board's
+%% own clock (sim_board measures the offsets). The boards don't need to be
+%% connected to each other: the samples go through hera_com's multicast.
+%% The outcome is written to Dir/done.json, which sim_board waits for.
 
 -define(MARGIN_MS, 2000).
 
 main([Role, Dir, T0Str, PeerStr]) ->
-    try run(list_to_existing_atom(Role), Dir, list_to_integer(T0Str), list_to_atom(PeerStr)) of
+    try run(list_to_existing_atom(Role), Dir, list_to_integer(T0Str), list_to_atom(PeerStr), host) of
         _ -> halt(0)
     catch
         Class:Reason:Stack ->
@@ -28,12 +38,34 @@ main([Role, Dir, T0Str, PeerStr]) ->
             halt(1)
     end.
 
-run(Role, Dir, T0, Peer) when Role =:= master; Role =:= tag ->
+board(Role, Dir, T0, Peer) ->
+    Result = try run(Role, Dir, T0, Peer, board) of
+        Stats -> #{status => ok, role => Role, stats => Stats}
+    catch
+        Class:Reason:Stack ->
+            #{status => error, role => Role,
+              error => iolist_to_binary(io_lib:format("~p:~p~n~p", [Class, Reason, Stack]))}
+    end,
+    sim_replay:write_json(filename:join(Dir, "done.json"), Result).
+
+%% Len bytes of File from Offset, for sim_board's chunked fetch.
+read_chunk(File, Offset, Len) ->
+    {ok, Fd} = file:open(File, [read, binary, raw]),
+    try file:pread(Fd, Offset, Len) after file:close(Fd) end.
+
+run(Role, Dir, T0, Peer, Where) when Role =:= master; Role =:= tag ->
     Meta = sim_replay:read_json(filename:join(Dir, "meta.json")),
     Duration = round(maps:get(<<"duration">>, Meta) * 1000),
-    process_flag(trap_exit, true),
-    {ok, _} = hera_sup:start_link(),
-    ok = connect(Peer, T0),
+    case Where of
+        host ->
+            process_flag(trap_exit, true),
+            {ok, _} = hera_sup:start_link(),
+            ok = connect(Peer, T0);
+        board ->
+            %% A crash of sim_fusion then shows in done.json, via sim_fusion:stop/1.
+            process_flag(trap_exit, true),
+            is_pid(whereis(hera_data)) orelse error(hera_not_running)
+    end,
     Fusion = case Role of
         master ->
             Cfg = sim_replay:filter_cfg(Dir, Meta),
@@ -47,8 +79,12 @@ run(Role, Dir, T0, Peer) when Role =:= master; Role =:= tag ->
         name => Stream, t0 => T0, dir => Dir}),
     sleep_until(T0 + Duration + ?MARGIN_MS),
     case Fusion of
-        undefined -> ok;
-        _ -> io:format("sim_live master: ~p~n", [sim_fusion:stop(Fusion)])
+        undefined ->
+            #{};
+        _ ->
+            Stats = sim_fusion:stop(Fusion),
+            io:format("sim_live master: ~p~n", [Stats]),
+            Stats
     end.
 
 %% The peer is started at the same time; retry until T0.
