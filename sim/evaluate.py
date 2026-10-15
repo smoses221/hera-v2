@@ -5,9 +5,12 @@ update to the next (zero-order hold), sampled on a uniform grid (GRID_HZ)
 and compared with the truth at the same time. Metrics are given over the
 whole run and after SETTLE_S (once the initial transient is gone).
 
-A UWB-only reference (two-circle intersection of the latest range to each
-anchor, on the tag's side of the anchor line) is evaluated the same way, so
-the filter's gain over the raw ranges is visible.
+Two references are evaluated the same way, so the filter's gain is visible:
+  - UWB only: two-circle intersection of the latest range to each anchor,
+    on the tag's side of the anchor line;
+  - NAV only: the same filter fed only the NAV samples, no UWB correction
+    (estimate_nav_only.csv, sim_replay:nav_only/1). Its error grows with
+    time, so it is also given at fixed times (NAV_ONLY_AT_S).
 
 Usage: python3 sim/evaluate.py <run_dir> [<run_dir> ...]
 """
@@ -26,6 +29,7 @@ GRID_HZ = 100.0
 SETTLE_S = 5.0
 CHI2_2D_3SIGMA = 9.0  # NEES bound for 2 dof at ~98.9 % (the 2D "3 sigma" ellipse)
 UWB_PAIR_MAX_S = 1.5  # max age of the other anchor's range in the UWB-only fix
+NAV_ONLY_AT_S = [1, 2, 5, 10, 30]  # times at which the NAV-only error is reported (+ the end)
 
 
 def load_csv(path):
@@ -118,6 +122,15 @@ def evaluate(run_dir, plots=True):
     u_err = np.hypot(u_xy[:, 0] - np.interp(u_grid, tr["t"], tr["px"]),
                      u_xy[:, 1] - np.interp(u_grid, tr["t"], tr["py"]))
 
+    nav = None
+    if (run / "estimate_nav_only.csv").exists():
+        n_est = load_csv(run / "estimate_nav_only.csv")
+        n_t = n_est["t"].astype(float)
+        n_xy = np.column_stack([hold(n_t, n_est[c].astype(float), t_grid) for c in ["px", "py"]])
+        n_err = np.hypot(n_xy[:, 0] - truth["px"], n_xy[:, 1] - truth["py"])
+        n_ez = hold(n_t, n_est["pz"].astype(float), t_grid) - truth["pz"]
+        nav = {"xy": n_xy, "err": n_err}
+
     settled = t_grid >= SETTLE_S
     metrics = {
         "experiment": meta.get("experiment") or experiment_of(run),
@@ -132,6 +145,12 @@ def evaluate(run_dir, plots=True):
         "inside_3sigma": float(np.mean(nees <= CHI2_2D_3SIGMA)),
         "uwb_only_pos2d": stats(u_err) if len(u_err) else None,
         "uwb_only_pos2d_settled": stats(u_err[u_grid >= SETTLE_S]) if len(u_err) else None,
+        "nav_only": {
+            "pos2d": stats(nav["err"]), "z": stats(n_ez),
+            "pos2d_at_s": {f"{s:g}": float(np.interp(s, t_grid, nav["err"]))
+                           for s in NAV_ONLY_AT_S if s < t_grid[-1]}
+                          | {"end": float(nav["err"][-1])},
+        } if nav else None,
         "updates": {"total": int(len(t_est)),
                     "nav": int(np.sum(est["src"] == "nav")), "uwb": int(np.sum(est["src"] == "uwb"))},
         "late": erl.get("late"), "filter_wall_us": erl.get("filter_wall_us"),
@@ -142,7 +161,7 @@ def evaluate(run_dir, plots=True):
 
     if plots:
         plot(run, meta, mode, tr, est, fixes, t_grid, ex, ey, ez, e2d, eyaw, bound3, e,
-             u_grid, u_err, metrics)
+             u_grid, u_err, metrics, nav)
     return metrics
 
 
@@ -175,7 +194,7 @@ def live_metrics(run, erl):
 
 
 def plot(run, meta, mode, tr, est, fixes, t_grid, ex, ey, ez, e2d, eyaw, bound3, e,
-         u_grid, u_err, metrics):
+         u_grid, u_err, metrics, nav=None):
     anchors = np.array([v for _, v in sorted(meta["anchors"].items(), key=lambda kv: int(kv[0]))])
     title = f"{meta['scenario']} (seed {meta['seed']}, {mode})"
 
@@ -186,11 +205,22 @@ def plot(run, meta, mode, tr, est, fixes, t_grid, ex, ey, ez, e2d, eyaw, bound3,
     ax.plot(e["px"], e["py"], "-", lw=1, color="tab:blue", label="filter")
     ax.plot(anchors[:, 0], anchors[:, 1], "r^", ms=10, label="anchors")
     ax.plot(tr["px"][0], tr["py"][0], "ko", mfc="none", ms=8, label="start")
+    # The view fits truth, filter and anchors; the NAV-only path may leave it.
+    pts = np.vstack([np.column_stack([tr["px"], tr["py"]]), np.column_stack([e["px"], e["py"]]),
+                     anchors[:, :2]])
+    lo, hi = pts.min(axis=0) - 0.3, pts.max(axis=0) + 0.3
+    if nav:
+        inside = np.all((nav["xy"] >= lo) & (nav["xy"] <= hi), axis=1)
+        leaves = f", leaves the view at {t_grid[np.argmin(inside)]:.1f} s" if not inside.all() else ""
+        ax.plot(nav["xy"][:, 0], nav["xy"][:, 1], "-", lw=1, color="tab:red", alpha=0.7,
+                label=f"NAV only{leaves}")
+    ax.set_xlim(lo[0], hi[0])
+    ax.set_ylim(lo[1], hi[1])
     ax.set_aspect("equal")
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
     ax.set_title(f"Trajectory: {title}")
-    ax.legend(fontsize=8, loc="best")
+    ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.02, 1.0))
     ax.grid(alpha=0.3)
     footnote(fig, meta, mode)
     fig.savefig(run / "trajectory.png", dpi=130, bbox_inches="tight")
@@ -201,6 +231,10 @@ def plot(run, meta, mode, tr, est, fixes, t_grid, ex, ey, ez, e2d, eyaw, bound3,
         ax.plot(u_grid, u_err, color="0.7", lw=0.8, label="UWB only")
     ax.plot(t_grid, e2d, color="tab:blue", lw=1, label="filter |error|")
     ax.plot(t_grid, bound3, "--", color="tab:orange", lw=1, label="filter 3σ (major axis)")
+    top = 1.05 * max([e2d.max(), bound3[t_grid >= 1.0].max()] + ([u_err.max()] if len(u_err) else []))
+    if nav:
+        ax.plot(t_grid, nav["err"], color="tab:red", lw=1, alpha=0.7, label="NAV only (see drift.png)")
+    ax.set_ylim(0, top)
     p = metrics["pos2d_settled"]
     ax.set_title(f"2D position error: {title}. After {SETTLE_S:g} s: RMSE {p['rmse']*100:.1f} cm, "
                  f"p95 {p['p95']*100:.1f} cm")
@@ -212,6 +246,24 @@ def plot(run, meta, mode, tr, est, fixes, t_grid, ex, ey, ez, e2d, eyaw, bound3,
     footnote(fig, meta, mode)
     fig.savefig(run / "error_time.png", dpi=130, bbox_inches="tight")
     plt.close(fig)
+
+    if nav:
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.semilogy(t_grid, np.maximum(nav["err"], 1e-4), color="tab:red", lw=1, label="NAV only")
+        if len(u_err):
+            ax.semilogy(u_grid, np.maximum(u_err, 1e-4), color="0.6", lw=0.8, label="UWB only")
+        ax.semilogy(t_grid, np.maximum(e2d, 1e-4), color="tab:blue", lw=1, label="filter (NAV + UWB)")
+        at = metrics["nav_only"]["pos2d_at_s"]
+        ax.set_title(f"2D position error, log scale: {title}. NAV only: "
+                     + ", ".join(f"{v*100:.0f} cm at {k} s" if k != "end" else f"{v:.2f} m at the end"
+                                 for k, v in at.items() if k in ("1", "10", "end")))
+        ax.set_xlabel("t (s)")
+        ax.set_ylabel("error (m)")
+        ax.legend(fontsize=8)
+        ax.grid(alpha=0.3, which="both")
+        footnote(fig, meta, mode)
+        fig.savefig(run / "drift.png", dpi=130, bbox_inches="tight")
+        plt.close(fig)
 
     sig = {"x": np.sqrt(e["pxx"]), "y": np.sqrt(e["pyy"]), "z": np.sqrt(e["pzz"])}
     fig, axs = plt.subplots(4, 1, figsize=(10, 9), sharex=True)
@@ -252,7 +304,9 @@ def summary_line(m):
     return (f"{m['scenario']:>14} seed {m['seed']:<3} {m['mode']:<7} "
             f"2D RMSE {p['rmse']*100:6.1f} cm (settled {s['rmse']*100:6.1f}, p95 {s['p95']*100:6.1f}, "
             f"UWB-only {u['rmse']*100:6.1f})  z RMSE {m['z']['rmse']*100:5.1f} cm  "
-            f"in 3σ {m['inside_3sigma']*100:5.1f} %")
+            f"in 3σ {m['inside_3sigma']*100:5.1f} %"
+            + (f"  NAV-only {m['nav_only']['pos2d_at_s'].get('10', float('nan'))*100:.0f} cm at 10 s, "
+               f"{m['nav_only']['pos2d_at_s']['end']:.2f} m at end" if m.get("nav_only") else ""))
 
 
 if __name__ == "__main__":

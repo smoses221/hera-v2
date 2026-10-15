@@ -124,6 +124,8 @@ def run_live(directory):
                          for r in failed)
         raise RuntimeError(f"live run failed on {failed} (a hera_com that can't open its socket "
                            f"retries forever: is a non-loopback IPv4 interface up?)\n{logs}")
+    # The NAV-only reference depends only on nav.csv, so it is computed offline.
+    subprocess.run(erl_cmd("-run", "sim_replay", "main", str(directory), "nav_only"), cwd=REPO, check=True)
 
 
 def parse_set(items):

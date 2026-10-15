@@ -1,6 +1,6 @@
 -module(sim_replay).
 
--export([main/1, run/1, run/2]).
+-export([main/1, run/1, run/2, nav_only/1]).
 -export([filter_cfg/2, read_csv/1, read_json/1, write_json/2]).
 -export([estimate_header/0, estimate_row/2, fmt/1, erl_meta/1]).
 
@@ -14,14 +14,26 @@
 %%   estimate.csv  one row per filter update (see estimate_header/0)
 %%   erl_meta.json backend, OTP release, module md5s, effective config
 %%
-%% Deterministic: the same inputs and the same BEAMs give a byte-identical
-%% estimate.csv. erl_meta.json also holds the run's wall time, so it differs.
+%% nav_only/1 is the NAV-only reference: the same filter, configuration
+%% and initial state, fed only the NAV samples (no UWB correction, so no
+%% planar pseudo-measurement either), written to estimate_nav_only.csv.
+%% It shows how fast the IMU alone drifts. It doesn't depend on the run
+%% mode, so live runs get it from their nav.csv too.
 %%
-%% From the shell: sim_replay:run("data/sim/circle/s1_abc1234_offline").
-%% From sim/run.py: erl -noshell -run sim_replay main <RunDir>
+%% Deterministic: the same inputs and the same BEAMs give byte-identical
+%% estimate CSVs. erl_meta.json also holds the run's wall time, so it differs.
+%%
+%% From the shell: sim_replay:run(Dir), sim_replay:nav_only(Dir).
+%% From sim/run.py: erl -noshell -run sim_replay main <RunDir> [nav_only]
+%% (without nav_only: both; with it: only the NAV-only reference).
 
-main([RunDir]) ->
-    try run(RunDir) of
+main(Args) ->
+    try
+        case Args of
+            [RunDir] -> run(RunDir), nav_only(RunDir);
+            [RunDir, "nav_only"] -> nav_only(RunDir)
+        end
+    of
         _ -> halt(0)
     catch
         Class:Reason:Stack ->
@@ -35,14 +47,9 @@ run(RunDir) ->
 run(RunDir, Overrides) ->
     Meta = read_json(filename:join(RunDir, "meta.json")),
     Cfg = filter_cfg(RunDir, Meta),
-    Fusion0 = hera_fusion:new(maps:merge(Cfg, Overrides)),
     Events = events(RunDir),
     Start = erlang:monotonic_time(microsecond),
-    {Rows, Fusion} = lists:mapfoldl(
-        fun(Event, F0) ->
-            F1 = apply_event(Event, F0),
-            {estimate_row(element(2, Event), F1), F1}
-        end, Fusion0, Events),
+    {Rows, Fusion} = replay(hera_fusion:new(maps:merge(Cfg, Overrides)), Events),
     Elapsed = erlang:monotonic_time(microsecond) - Start,
     ok = file:write_file(filename:join(RunDir, "estimate.csv"), [estimate_header() | Rows]),
     #{late := Late} = hera_fusion:estimate(Fusion),
@@ -51,6 +58,21 @@ run(RunDir, Overrides) ->
             mode => offline, events => length(Events), late => Late,
             filter_wall_us => Elapsed}),
     #{events => length(Events), late => Late, filter_wall_us => Elapsed}.
+
+nav_only(RunDir) ->
+    Cfg = filter_cfg(RunDir, read_json(filename:join(RunDir, "meta.json"))),
+    Events = [E || E = {_, nav, _} <- events(RunDir)],
+    {Rows, _} = replay(hera_fusion:new(Cfg), Events),
+    ok = file:write_file(filename:join(RunDir, "estimate_nav_only.csv"), [estimate_header() | Rows]),
+    #{events => length(Events)}.
+
+%% Folds the events into the filter: {one estimate row per event, filter}.
+replay(Fusion0, Events) ->
+    lists:mapfoldl(
+        fun(Event, F0) ->
+            F1 = apply_event(Event, F0),
+            {estimate_row(element(2, Event), F1), F1}
+        end, Fusion0, Events).
 
 %% hera_fusion's configuration for this experiment: the defaults, then
 %% the anchors and initial state from meta.json, then filter.json.

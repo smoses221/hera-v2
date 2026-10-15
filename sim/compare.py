@@ -47,6 +47,8 @@ COLUMNS = [
     ("yaw_rmse_deg", lambda m: np.degrees(m["yaw"]["rmse"])),
     ("nees2d_mean", lambda m: m["nees2d_mean"]),
     ("inside_3sigma_pct", lambda m: 100 * m["inside_3sigma"]),
+    ("nav_only_10s_cm", lambda m: nav_only(m, "10") * 100),
+    ("nav_only_end_m", lambda m: nav_only(m, "end")),
     ("uwb_only_settled_rmse_cm",
      lambda m: 100 * m["uwb_only_pos2d_settled"]["rmse"] if m["uwb_only_pos2d_settled"] else float("nan")),
     ("nav_delivered_pct", lambda m: live(m, "nav", "delivered")),
@@ -54,6 +56,11 @@ COLUMNS = [
     ("nav_stamp_err_ms", lambda m: live(m, "nav", "timestamp_error_ms")),
     ("uwb_stamp_err_ms", lambda m: live(m, "uwb", "timestamp_error_ms")),
 ]
+
+
+def nav_only(m, at):
+    n = m.get("nav_only")
+    return n["pos2d_at_s"].get(at, float("nan")) if n else float("nan")
 
 
 def live(m, stream, key):
@@ -120,8 +127,8 @@ def compare(dirs, out):
     for exp_dir in sorted({m["_experiment_dir"] for m in runs if m["_experiment_dir"]}):
         md += [f"**{exp_dir.name}**", ""] + (experiments.notes(exp_dir) or ["(no notes)"]) + [""]
     md += ["| group | scenario | seeds | settled 2D RMSE (cm) | p95 (cm) | z RMSE (cm) | yaw RMSE (°) "
-          "| NEES | in 3σ (%) | UWB-only RMSE (cm) |",
-          "|---|---|---|---|---|---|---|---|---|---|"]
+          "| NEES | in 3σ (%) | UWB-only RMSE (cm) | NAV-only at 10 s (cm) | NAV-only at end (m) |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for label, by_sc in all_seeds.items():
         for sc in scenarios:
             rs = by_sc.get(sc)
@@ -133,7 +140,8 @@ def compare(dirs, out):
             md.append(f"| {label} | {sc} | {','.join(str(r['seed']) for r in rs)} | {mean('settled_rmse_cm'):.1f} | "
                       f"{mean('settled_p95_cm'):.1f} | {mean('z_rmse_cm'):.1f} | {mean('yaw_rmse_deg'):.2f} | "
                       f"{mean('nees2d_mean'):.2f} | {mean('inside_3sigma_pct'):.1f} | "
-                      f"{mean('uwb_only_settled_rmse_cm'):.1f} |")
+                      f"{mean('uwb_only_settled_rmse_cm'):.1f} | {mean('nav_only_10s_cm'):.0f} | "
+                      f"{mean('nav_only_end_m'):.2f} |")
     md += ["", "rmse.png compares the seeds every group has: " + ", ".join(
         f"{sc} {sorted(common[sc]) or 'none in common'}" for sc in scenarios) + "."]
     (out / "summary.md").write_text("\n".join(md) + "\n")

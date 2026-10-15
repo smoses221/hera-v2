@@ -10,7 +10,8 @@ sim/generate.py ──> truth.csv  nav.csv  uwb.csv  meta.json
                          │
                     estimate.csv (+ received.csv, sent_*.csv when live)
                          │
-sim/evaluate.py ──> metrics.json  trajectory.png  error_time.png  error_axes.png  error_cdf.png
+                    estimate_nav_only.csv (same filter, NAV samples only: sim_replay:nav_only/1)
+sim/evaluate.py ──> metrics.json  trajectory.png  error_time.png  error_axes.png  error_cdf.png  drift.png
 sim/compare.py  ──> runs.csv  summary.md  rmse.png   (across runs)
 ```
 
@@ -88,6 +89,7 @@ The estimate is held from one update to the next and sampled at 100 Hz, which is
 | `x`, `y`, `z`, `vel2d`, `yaw` | per-component errors |
 | `nees2d_mean`, `inside_3sigma` | consistency: mean NEES (≈ 2 if the covariance is honest) and the share of time inside the 3σ ellipse (≈ 98.9 %) |
 | `uwb_only_pos2d*` | reference: two-circle fix from the latest range to each anchor |
+| `nav_only` | reference: the same filter, same start, fed only the NAV samples (no UWB correction, so no planar constraint either). Its error grows with time, so it is also given at 1, 2, 5, 10, 30 s and at the end (`pos2d_at_s`). `drift.png` shows it next to the filter and UWB only, on a log scale |
 | `live.<stream>` | live only: delivered/sent, timestamp error (receipt stamp − true time), send → processed delay; `seq_gaps` counts samples overwritten in `hera_data` before they were read |
 
 ## Live mode: what it does and doesn't test
