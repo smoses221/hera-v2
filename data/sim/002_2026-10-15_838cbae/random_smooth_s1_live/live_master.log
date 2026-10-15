@@ -1,0 +1,5 @@
+Connection established!
+sim_live master: #{late => 0,polls => 32845,
+                   received => #{nav => 7061,uwb => 128},
+                   foreign_nodes => [],
+                   seq_gaps => #{nav => 1,uwb => 0}}
