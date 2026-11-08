@@ -244,7 +244,10 @@ setup_radio(Opts) ->
 poll_final(Anchor, Data) ->
     {Poll, Data1} = frame(Anchor, ?ENABLED, <<"POLL">>, Data),
     case ieee802154:transmission(Poll, ?ALL_RANGING) of
-        {ok, #ranging_informations{ranging_received = ?ALL_RANGING,
+        % For a ranging transmission the stack sets ranging_received to
+        % true (duty_cycle_non_beacon:tx_ranging_infos/2), not to a
+        % ranging_received() code: ?ALL_RANGING here never matches.
+        {ok, #ranging_informations{ranging_received = true,
                                    ranging_counter_start = PollTx,
                                    ranging_counter_stop = RespRx}} ->
             {Final, Data2} = frame(Anchor, ?DISABLED, <<"FINAL">>, Data1),

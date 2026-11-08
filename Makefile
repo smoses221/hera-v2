@@ -9,21 +9,22 @@ PORT     ?= 8000
 # Must match -sname in grisp/grisp2/common/deploy/files/grisp.ini.mustache
 NODE     ?= board
 NODES    = $(foreach B,$(BOARDS),$(NODE)@$(B))
-VERSION  = $(shell sed -n 's/.*{vsn, *"\([^"]*\)"}.*/\1/p' $(APP_SRC))
+# The release version (rebar.config), which names the update package
+VERSION  = $(shell sed -n 's/.*{release, *{[^,]*, *"\([^"]*\)"}.*/\1/p' rebar.config)
 PACKAGE  = _grisp/update/grisp2.$(APP).$(VERSION).tar
 REL_DIR  = releases/$(APP)/$(VERSION)
 URL      = http://$(HOST_IP):$(PORT)/$(APP)/$(VERSION)
 FLEET    = escript scripts/grisp_fleet.escript $(COOKIE)
 
-.PHONY: release bump pack push reboot validate info sim sim-all sim-list sim-board
+.PHONY: release bump pack push reboot validate info sim sim-all sim-list sim-board uwb-ranging plot-uwb
 
 # Bump the patch version, build the update package, push it and reboot the boards
 release: bump pack push reboot
 
-# Increment the last version digit in both the .app.src and rebar.config
+# Increment the release's last version digit (rebar.config) and copy it to the .app.src
 bump:
 	@old=$(VERSION); new=$${old%.*}.$$(( $${old##*.} + 1 )); \
-	sed -i "s/{vsn, *\"$$old\"}/{vsn, \"$$new\"}/" $(APP_SRC); \
+	sed -i "s/{vsn, *\"[^\"]*\"}/{vsn, \"$$new\"}/" $(APP_SRC); \
 	sed -i "s/\({release, *{[^,]*, *\)\"$$old\"/\1\"$$new\"/" rebar.config; \
 	echo "Version $$old -> $$new"; \
 	grep -q "\"$$new\"" rebar.config || { echo "rebar.config not updated"; exit 1; }
@@ -82,3 +83,20 @@ sim-board:
 # List the experiments, with their first note
 sim-list:
 	python3 sim/experiments.py list
+
+# Uncalibrated UWB ranging at hand-measured distances (scripts/uwb_ranging.escript).
+# Interactive: asks for each true distance, saves to data/uwb_ranging/<date>/. E.g.
+#   make uwb-ranging RANGES=100 COMMENT="corridor, LOS, 1 m high"
+UWB_TAG    ?= grisp-001021
+UWB_ANCHOR ?= grisp-002075
+RANGES     ?= 100
+uwb-ranging:
+	escript scripts/uwb_ranging.escript --cookie $(COOKIE) \
+		--tag $(NODE)@$(UWB_TAG) --anchor $(NODE)@$(UWB_ANCHOR) --n $(RANGES) \
+		$(if $(COMMENT),--comment "$(COMMENT)")
+
+# Plots of UWB ranging sessions (plots/uwb_ranging.py), e.g.
+#   make plot-uwb                     the latest session
+#   make plot-uwb SESSIONS="data/uwb_ranging/<A> data/uwb_ranging/<B>"
+plot-uwb:
+	python3 plots/uwb_ranging.py $(SESSIONS)

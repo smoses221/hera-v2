@@ -1,6 +1,6 @@
 {application, hera,
  [{description, "A framework for dynamic measurements."},
-  {vsn, "1.0.0"},
+  {vsn, "1.0.9"},
   {registered, [hera_data, hera_com, hera_measure_sup]},
   {mod, {hera, []}},
   {applications,
