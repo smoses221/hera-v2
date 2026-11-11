@@ -8,6 +8,8 @@
 main([Cookie, Action | Rest]) ->
     {Args, ["--" | Nodes]} = lists:splitwith(fun(A) -> A =/= "--" end, Rest),
     Name = list_to_atom("grisp_fleet_" ++ os:getpid()),
+    % net_kernel:start/2, unlike erl -sname, doesn't start epmd itself. Worked previously because erl -sname leaves epmd running.
+    _ = os:cmd("epmd -daemon"),
     {ok, _} = net_kernel:start(Name, #{name_domain => shortnames}),
     erlang:set_cookie(list_to_atom(Cookie)),
     Self = self(),
