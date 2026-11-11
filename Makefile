@@ -10,7 +10,7 @@ PORT     ?= 8000
 NODE     ?= board
 NODES    = $(foreach B,$(BOARDS),$(NODE)@$(B))
 # The release version (rebar.config), which names the update package
-VERSION  = $(shell sed -n 's/.*{release, *{[^,]*, *"\([^"]*\)"}.*/\1/p' rebar.config)
+VERSION  = $(shell sed -n 's/^ *.release, *.[a-z_]*, *"\([0-9.]*\)".*/\1/p' rebar.config)
 PACKAGE  = _grisp/update/grisp2.$(APP).$(VERSION).tar
 REL_DIR  = releases/$(APP)/$(VERSION)
 URL      = http://$(HOST_IP):$(PORT)/$(APP)/$(VERSION)
@@ -25,7 +25,7 @@ release: bump pack push reboot
 bump:
 	@old=$(VERSION); new=$${old%.*}.$$(( $${old##*.} + 1 )); \
 	sed -i "s/{vsn, *\"[^\"]*\"}/{vsn, \"$$new\"}/" $(APP_SRC); \
-	sed -i "s/\({release, *{[^,]*, *\)\"$$old\"/\1\"$$new\"/" rebar.config; \
+	sed -i "s/^\( *.release, *.[a-z_]*, *\)\"$$old\"/\1\"$$new\"/" rebar.config; \
 	echo "Version $$old -> $$new"; \
 	grep -q "\"$$new\"" rebar.config || { echo "rebar.config not updated"; exit 1; }
 
