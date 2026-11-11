@@ -1,0 +1,128 @@
+{
+  "anchor": {
+    "node": "board@grisp-002075",
+    "pan_id": 51966,
+    "release": "hera-1.0.9",
+    "role": "anchor",
+    "rx_antd": 16450,
+    "short_addr": 2,
+    "tx_antd": 16450,
+    "uwb_arx2init": false,
+    "uwb_twr_md5": "D8D3FA4DB76B1A7EE722DC50CB6E4DF5"
+  },
+  "events": [
+    {
+      "event": "rx_restarted",
+      "node": "board@grisp-002075",
+      "pmsc_state_after": 5,
+      "pmsc_state_before": 2,
+      "role": "anchor",
+      "time": "2026-11-09T18:18:52+01:00"
+    },
+    {
+      "event": "rx_restarted",
+      "node": "board@grisp-001021",
+      "pmsc_state_after": 5,
+      "pmsc_state_before": 2,
+      "role": "tag",
+      "time": "2026-11-09T18:18:52+01:00"
+    },
+    {
+      "event": "dw1000_reset",
+      "node": "board@grisp-001021",
+      "panadr": {
+        "pan_id": "FFFF",
+        "short_addr": "FFFF"
+      },
+      "role": "tag",
+      "time": "2026-11-09T18:22:54+01:00"
+    },
+    {
+      "event": "uwb_twr_restarted",
+      "node": "board@grisp-002075",
+      "role": "anchor",
+      "time": "2026-11-09T18:25:25+01:00"
+    },
+    {
+      "event": "rx_restarted",
+      "node": "board@grisp-002075",
+      "pmsc_state_after": 5,
+      "pmsc_state_before": 2,
+      "role": "anchor",
+      "time": "2026-11-09T18:25:25+01:00"
+    },
+    {
+      "event": "dw1000_reset",
+      "node": "board@grisp-001021",
+      "panadr": {
+        "pan_id": "FFFF",
+        "short_addr": "FFFF"
+      },
+      "role": "tag",
+      "time": "2026-11-09T18:26:55+01:00"
+    },
+    {
+      "event": "uwb_twr_restarted",
+      "node": "board@grisp-002075",
+      "role": "anchor",
+      "time": "2026-11-09T18:30:45+01:00"
+    },
+    {
+      "event": "dw1000_reset",
+      "node": "board@grisp-002075",
+      "panadr": "{badrpc,timeout}",
+      "role": "anchor",
+      "time": "2026-11-09T18:34:43+01:00"
+    },
+    {
+      "event": "uwb_twr_restarted",
+      "node": "board@grisp-002075",
+      "role": "anchor",
+      "time": "2026-11-09T18:35:18+01:00"
+    }
+  ],
+  "finished": "2026-11-09T18:41:33+01:00",
+  "host_otp": "29",
+  "options": {
+    "anchor": "board@grisp-002075",
+    "anchor_addr": 2,
+    "antd": 16450,
+    "comment": "LOS face to face 2",
+    "n": 100,
+    "pan_id": 51966,
+    "period": 0,
+    "tag": "board@grisp-001021",
+    "tag_addr": 1,
+    "timeout": 500
+  },
+  "points": 13,
+  "started": "2026-11-09T18:18:52+01:00",
+  "tag": {
+    "node": "board@grisp-001021",
+    "pan_id": 51966,
+    "release": "hera-1.0.9",
+    "role": "tag",
+    "rx_antd": 16450,
+    "short_addr": 1,
+    "tx_antd": 16450,
+    "uwb_arx2init": false,
+    "uwb_twr_md5": "D8D3FA4DB76B1A7EE722DC50CB6E4DF5"
+  },
+  "uwb_twr_stats": {
+    "anchor": {
+      "bad_timestamps": 0,
+      "ok": 0,
+      "reports": 601,
+      "timeout": 0,
+      "tx_error": 0
+    },
+    "tag": {
+      "bad_timestamps": 0,
+      "ok": 902,
+      "reports": 0,
+      "timeout": 0,
+      "tx_error": 0
+    }
+  }
+}
+
