@@ -127,8 +127,8 @@ points(P, O, Acc) ->
                 {ok, O1} ->
                     {Summary = #{n := N, ok := Ok}, O2} = measure_point(P, Dist, Note, O1),
                     Ok * 2 < N andalso radio_problems(O2) =/= [] andalso
-                        log("WARNING: a DW1000 lost its configuration during "
-                            "this point (see above): its ranges are unusable", []),
+                        log("WARNING: a radio problem showed up during this "
+                            "point (see above): its ranges are unusable", []),
                     points(P + 1, O2, [Summary | Acc]);
                 {quit, O1} ->
                     {Acc, O1}
@@ -136,69 +136,144 @@ points(P, O, Acc) ->
     end.
 
 %% The DW1000 keeps its configuration only while powered. A glitch on the
-%% Pmod (e.g. when a board is moved) resets it to its defaults while the
-%% GRiSP keeps running, and nothing in the software notices: uwb_twr still
-%% runs, but the chip has address 0xFFFF and auto-ACK off, so every POLL
-%% ends in no_ack. The chip's own address register shows it.
-radio_problems(#{tag := Tag, anchor := Anchor, tag_addr := TA, anchor_addr := AA,
-                 pan_id := Pan}) ->
-    [{Role, Node, Got} || {Role, Node, Addr} <- [{tag, Tag, TA}, {anchor, Anchor, AA}],
-                          Got <- [rpc:call(Node, pmod_uwb, read, [panadr], 5000)],
-                          not radio_configured(Got, Addr, Pan)].
+%% Pmod (e.g. a loose USB cable when a board is moved) resets it to its
+%% defaults while the GRiSP keeps running, and nothing in the software
+%% notices: uwb_twr still runs, but the chip has address 0xFFFF and
+%% auto-ACK off, so every POLL ends in no_ack. Only a reboot configures
+%% the chip fully again.
+%%
+%% A freshly rebooted board has no uwb_twr yet, so its chip has the
+%% default address too, but it only needs uwb_twr started again.
+%%
+%% radio_problems/1 returns {Role, Node, Problem} for each board that
+%% isn't ready to range, with Problem one of
+%%   down            the board doesn't answer (rebooting, off, off the hotspot)
+%%   booting         it answers but hasn't finished starting its applications
+%%   not_started     it has booted but uwb_twr doesn't run (a fresh reboot)
+%%   {reset, Got}    uwb_twr runs but the chip lost its configuration
+%%   {no_answer, E}  a call to the board failed (e.g. a register read timed out)
+radio_problems(O = #{tag := Tag, anchor := Anchor}) ->
+    % The anchor first, so that it already answers when the tag starts.
+    [{Role, Node, Problem} || {Role, Node} <- [{anchor, Anchor}, {tag, Tag}],
+                              Problem <- [radio_state(Node, role_addr(Role, O), O)],
+                              Problem =/= ok].
 
-radio_configured(#{short_addr := <<Addr:16>>, pan_id := <<Pan:16>>}, Addr, Pan) -> true;
-radio_configured(_, _, _) -> false.
+radio_state(Node, Addr, #{pan_id := Pan}) ->
+    case rpc:call(Node, erlang, whereis, [uwb_twr], 5000) of
+        Pid when is_pid(Pid) ->
+            case rpc:call(Node, pmod_uwb, read, [panadr], 5000) of % What the chip has
+                Got = #{} ->
+                    case radio_configured(Got, Addr, Pan) of % What we expect
+                        true -> ok;
+                        false -> {reset, Got}
+                    end;
+                Err ->
+                    {no_answer, Err}
+            end;
+        undefined ->
+            case rpc:call(Node, init, get_status, [], 5000) of
+                {badrpc, Err} -> {no_answer, {badrpc, Err}};
+                {started, _} -> not_started;
+                {_, _} -> booting
+            end;
+        {badrpc, nodedown} ->
+            down;
+        Err ->
+            {no_answer, Err}
+    end.
 
-%% Before each point: if a radio lost its configuration, the board must
-%% be rebooted (that resets and configures the chip again); the session
-%% then sets uwb_twr up again on it and goes on.
+radio_configured(#{short_addr := <<Addr:16>>, pan_id := <<Pan:16>>}, Addr, Pan) -> true; % Use pattern matching to check that the radio's output config matches what we expect.
+radio_configured(_, _, _) -> false. % Catches things that arent a map
+
+%% Before each point. A freshly rebooted board gets uwb_twr started again
+%% at once. For the other problems the session waits for the user (to
+%% reboot a board, or for it to come back), then checks again.
 ensure_radios(O) ->
-    case radio_problems(O) of
-        [] ->
-            {ok, unstick(O)};
-        Bad ->
-            [log("ERROR: the DW1000 of the ~s (~s) lost its configuration "
-                 "(address register: ~s). Usually a power glitch on the "
-                 "Pmod, e.g. when the board is moved.", [Role, Node, panadr_str(Got)])
-             || {Role, Node, Got} <- Bad],
-            Events = [#{time => iso_now(), node => Node, role => Role,
-                        event => dw1000_reset, panadr => jsonable(Got)}
-                      || {Role, Node, Got} <- Bad],
-            recover(Bad, O#{events := Events ++ maps:get(events, O)})
+    ensure_radios(O, []).
+
+%% Reported: the boards whose problem is already logged, so that a board
+%% being waited for isn't logged again at each check.
+ensure_radios(O, Reported) ->
+    Problems = radio_problems(O),
+    Fresh = [{Role, Node} || {Role, Node, not_started} <- Problems],
+    Bad = [P || P = {_, _, What} <- Problems, What =/= not_started],
+    O1 = lists:foldl(fun restart_uwb_twr/2, O, Fresh),
+    case {Bad, Fresh} of
+        {[], []} ->
+            {ok, unstick(O1)};
+        {[], _} ->
+            % A freshly started receiver has been seen stuck: unstick first.
+            O2 = unstick(O1),
+            test_range(O2),
+            {ok, O2};
+        _ ->
+            {Old, New} = lists:partition(
+                           fun({_, Node, _}) -> lists:member(Node, Reported) end, Bad),
+            [log("~s (~s) not ready yet: ~s", [Role, Node, problem_str(What)])
+             || {Role, Node, What} <- Old],
+            O2 = lists:foldl(fun report/2, O1, New),
+            recover(Bad, O2, lists:usort(Reported ++ [N || {_, N, _} <- New]))
     end.
 
-recover(Bad, O) ->
-    Boards = lists:join(" ", [tl(lists:dropwhile(fun(C) -> C =/= $@ end, atom_to_list(N)))
-                              || {_, N, _} <- Bad]),
-    Q = io_lib:format("Reboot it (make reboot BOARDS=\"~s\"), wait until it answers "
-                      "(make info BOARDS=\"~s\"), then press Enter here, or q to "
-                      "finish the session~n> ", [Boards, Boards]),
-    case io:get_line(Q) of
-        "q" ++ _ ->
-            {quit, O};
-        eof ->
-            {quit, O};
+restart_uwb_twr({Role, Node}, O) ->
+    log("~s (~s) was rebooted: starting uwb_twr on it again", [Role, Node]),
+    check_idle(Node),
+    setup(Node, Role, role_addr(Role, O), O),
+    add_event(#{node => Node, role => Role, event => uwb_twr_restarted}, O).
+
+report({Role, Node, What}, O) ->
+    log("ERROR: ~s (~s): ~s", [Role, Node, problem_str(What)]),
+    add_event(maps:merge(#{node => Node, role => Role}, problem_event(What)), O).
+
+problem_str({reset, Got}) ->
+    io_lib:format("the DW1000 lost its configuration (address register: ~s), "
+                  "usually a power glitch (loose USB cable?) when the board was moved",
+                  [panadr_str(Got)]);
+problem_str({no_answer, Err}) ->
+    io_lib:format("no answer from the board (~0p)", [Err]);
+problem_str(down) ->
+    "not reachable (rebooting, off, or off the hotspot?)";
+problem_str(booting) ->
+    "still booting".
+
+problem_event({reset, Got}) -> #{event => dw1000_reset, panadr => jsonable(Got)};
+problem_event({no_answer, Err}) -> #{event => no_answer, error => jsonable(Err)};
+problem_event(down) -> #{event => unreachable};
+problem_event(booting) -> #{event => booting}.
+
+%% Only a chip reset or a board that doesn't answer calls needs a reboot;
+%% for the others the user just waits.
+needs_reboot({reset, _}) -> true;
+needs_reboot({no_answer, _}) -> true;
+needs_reboot(_) -> false.
+
+recover(Bad, O, Reported) ->
+    Reboot = boards([N || {_, N, What} <- Bad, needs_reboot(What)]),
+    Wait = boards([N || {_, N, _} <- Bad]),
+    Q = case Reboot of
+        "" ->
+            io_lib:format("Wait until it answers (make info BOARDS=\"~s\"), then press "
+                          "Enter here, or q to finish the session~n> ", [Wait]);
         _ ->
-            Up = [N || {_, N, _} <- Bad, net_adm:ping(N) =:= pong],
-            case length(Up) =:= length(Bad) of
-                false ->
-                    log("not reachable yet", []),
-                    recover(Bad, O);
-                true ->
-                    [begin check_idle(N), setup(N, Role, role_addr(Role, O), O) end
-                     || {Role, N, _} <- Bad],
-                    case radio_problems(O) of
-                        [] ->
-                            test_range(O),
-                            Ev = [#{time => iso_now(), node => N, role => Role,
-                                    event => uwb_twr_restarted} || {Role, N, _} <- Bad],
-                            {ok, O#{events := Ev ++ maps:get(events, O)}};
-                        Still ->
-                            log("still not configured (not rebooted?)", []),
-                            recover(Still, O)
-                    end
-            end
+            io_lib:format("Reboot it (make reboot BOARDS=\"~s\"; rebooting the other "
+                          "board too does no harm), wait until it answers (make info "
+                          "BOARDS=\"~s\"), then press Enter here, or q to finish the "
+                          "session~n> ", [Reboot, Wait])
+    end,
+    case io:get_line(Q) of
+        "q" ++ _ -> {quit, O};
+        eof -> {quit, O};
+        _ -> ensure_radios(O, Reported)
     end.
+
+%% grisp-001021 for board@grisp-001021
+boards(Nodes) ->
+    lists:flatten(lists:join(" ", [tl(lists:dropwhile(fun(C) -> C =/= $@ end,
+                                                      atom_to_list(N)))
+                                   || N <- Nodes])).
+
+add_event(Ev, O) ->
+    O#{events := [Ev#{time => iso_now()} | maps:get(events, O)]}.
 
 %% The DW1000 has also been seen stuck in PMSC state 2 (a wait state)
 %% with its configuration intact: it ignores RXENAB, so it never
@@ -211,11 +286,13 @@ unstick(O = #{tag := Tag, anchor := Anchor}) ->
                 [{anchor, Anchor}, {tag, Tag}]).
 
 unstick(Role, Node, O) ->
+    log("checking ~s (~s) for stuck receiver", [Role, Node]),
     % Right after a range the tag's rx loop is restarting: look twice.
     case receiving(Node) orelse (ok =:= timer:sleep(50) andalso receiving(Node)) of
         true ->
             O;
         false ->
+            log("~s (~s) receiver is off, restarting it", [Role, Node]),
             Before = pmsc_state(Node),
             _ = rpc:call(Node, pmod_uwb, write, [sys_ctrl, #{trxoff => 1}], 5000),
             _ = rpc:call(Node, pmod_uwb, write, [sys_ctrl, #{rxenab => 1}], 5000),
