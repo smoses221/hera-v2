@@ -24,6 +24,11 @@ The fit is  raw = a * true + b  over all non-outlier ranges. Inverted, it
 is the per-anchor correction of hera_uwb (Range = Scale * Raw + Bias):
 Scale = 1/a, Bias = -b/a.
 
+A second fit, error = c0 + c1 * ln(true), follows the DW1000's bias that
+depends on the received power (which falls with 20 log10 of the distance):
+the error is largest close up and shrinks with distance, which a straight
+line can't follow over a wide range of distances.
+
 Needs numpy and matplotlib.
 """
 
@@ -149,6 +154,20 @@ def fit(sessions):
     return {"a": a, "b": b, "rms": float(np.sqrt(np.mean(resid ** 2))), "n": len(x)}
 
 
+def fit_log(sessions):
+    """error = raw - true = c0 + c1 * ln(true), over the non-outlier ranges."""
+    x = np.concatenate([np.full(pt["inlier"].sum(), pt["true"])
+                        for s in sessions for pt in s["points"]])
+    y = np.concatenate([pt["d"][pt["inlier"]] for s in sessions for pt in s["points"]])
+    keep = x > 0
+    x, y = x[keep], y[keep]
+    if len(np.unique(x)) < 2:
+        return None
+    c1, c0 = np.polyfit(np.log(x), y - x, 1)
+    resid = (y - x) - (c0 + c1 * np.log(x))
+    return {"c0": c0, "c1": c1, "rms": float(np.sqrt(np.mean(resid ** 2))), "n": len(x)}
+
+
 def print_table(sessions, limit):
     for s in sessions:
         print(f"\n{s['label']}")
@@ -175,9 +194,9 @@ def jitter(n, width, seed):
     return np.random.default_rng(seed).uniform(-width, width, n)
 
 
-def plot_accuracy(sessions, fitted, out, limit):
-    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(7.5, 7.5),
-                                   gridspec_kw={"height_ratios": [3, 2], "hspace": 0.08})
+def plot_accuracy(sessions, fitted, fitted_log, out, limit):
+    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(7.5, 8),
+                                   gridspec_kw={"height_ratios": [3, 2], "hspace": 0.22})
     trues = [pt["true"] for s in sessions for pt in s["points"] if pt["inlier"].any()]
     span = max(trues) - min(trues) if len(trues) > 1 else 1.0
     jw = 0.012 * max(span, 0.5)
@@ -216,7 +235,18 @@ def plot_accuracy(sessions, fitted, out, limit):
         ax1.plot(xs, a * xs + b, color=TEXT_2, lw=1.5, zorder=3,
                  label=f"fit: raw = {a:.3f}·true {b:+.3f} m  (RMS {fitted['rms'] * 100:.1f} cm)")
         ax2.plot(xs, (a * xs + b - xs) * 100, color=TEXT_2, lw=1.5, zorder=3)
+    if fitted_log:
+        c0, c1 = fitted_log["c0"], fitted_log["c1"]
+        xl = np.linspace(max(lo, min(trues) / 2), hi, 200)
+        el = c0 + c1 * np.log(xl)
+        ax1.plot(xl, xl + el, color=TEXT, lw=1.5, ls=(0, (1, 1.5)), zorder=3,
+                 label=f"fit: raw − true = {c0 * 100:+.1f} {c1 * 100:+.1f}·ln(true) cm  "
+                       f"(RMS {fitted_log['rms'] * 100:.1f} cm)")
+        ax2.plot(xl, el * 100, color=TEXT, lw=1.5, ls=(0, (1, 1.5)), zorder=3)
     ax1.set_xlim(lo, hi)
+    # sharex hides the top panel's tick labels: show them on both.
+    ax1.tick_params(labelbottom=True)
+    ax1.set_xlabel("true distance, measured by hand (m)")
 
     ax1.set_ylabel("raw range (m)")
     ax2.set_ylabel("error, raw − true (cm)")
@@ -322,8 +352,13 @@ def main():
               f"{{{1 / a:.4f}, {-b / a:.4f}}}")
     else:
         print("\nFit needs at least two distinct true distances.")
+    fitted_log = fit_log(sessions)
+    if fitted_log:
+        print(f"Log fit over {fitted_log['n']} ranges: raw - true = "
+              f"{fitted_log['c0'] * 100:+.2f} {fitted_log['c1'] * 100:+.2f} * ln(true) cm, "
+              f"residual RMS {fitted_log['rms'] * 100:.1f} cm")
 
-    plot_accuracy(sessions, fitted, out, args.outlier_m)
+    plot_accuracy(sessions, fitted, fitted_log, out, args.outlier_m)
     plot_samples(sessions, out, args.outlier_m)
     print(f"\nPlots in {out}/: ranging_accuracy.png, ranging_samples.png")
 
